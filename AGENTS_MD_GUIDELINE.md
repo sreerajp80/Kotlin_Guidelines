@@ -1,0 +1,361 @@
+# Guideline: How to Write an `AGENTS.md` for a Kotlin Android Project
+
+Every Kotlin Android project **MUST** have an `AGENTS.md` file at its root. This guideline defines the mandatory standards and structure for creating and maintaining `AGENTS.md` across all Kotlin projects (both new and migrated existing apps).
+
+`AGENTS.md` is read by AI coding assistants, agentic models, and LLMs (such as Gemini, Antigravity, Cursor, Windsurf, Codex, OpenDevin, and custom AI agents) automatically or upon session initialization in that project. It is the primary, tool-agnostic instruction file, ensuring non-Claude LLMs operate with full alignment to the project's architecture, security, build standards, and mandatory workflow rules.
+
+Every Kotlin repository MUST maintain both `CLAUDE.md` (for Claude Code native conventions) and `AGENTS.md` (for open/agentic LLM ecosystems) at the project root as mandatory Core Baseline requirements (**MUST**).
+
+---
+
+## 1. First choose a profile: Thin or Thick
+
+Pick one of two styles before you write anything.
+
+### Thin pointer profile
+Use this when the project already has (or will have) a full `docs/` folder — `architecture.md`,
+`security.md`, `release_process.md`, and so on.
+
+- `AGENTS.md` stays short. It gives identity, commands, and a short rule summary.
+- It **points** to the `docs/` files for detail. It does not repeat them.
+- Rule: if a detail lives in a `docs/` file, do not copy it into `AGENTS.md` — link to it.
+- In Thin profile repositories, `AGENTS.md` and `CLAUDE.md` share identical architecture and rule summaries.
+
+### Thick self-contained profile
+Use this when the project is small or has **no** `docs/` folder, so `AGENTS.md` must hold
+everything itself.
+
+- `AGENTS.md` inlines the detail: schema tables, ViewModel/repository tables, full dos-and-don'ts.
+
+### How to choose
+- Has a `docs/` set already, or the project is medium/large → **Thin**.
+- No `docs/`, small project, one developer → **Thick**.
+- When unsure, start **Thin** and grow. It is easier to add detail than to trim a wall of text.
+
+---
+
+## 2. Canonical section order
+
+Write sections in this order. Skip the ones that do not apply (see the checklist in §3).
+
+1. Title + read-first banner
+2. Project identity / tech stack
+3. Doc references (Thin profile) — the "read these before working" table
+4. Package naming (backtick `in` keyword if applicable)
+5. Hard / non-negotiable rules
+6. Architecture rules (layers, boundaries, state, navigation, database)
+7. Build & run commands
+8. Build types / product flavors
+9. Signing / keystore
+10. Security rules
+11. String resources (mandatory for all apps)
+12. Code style / naming conventions
+13. Testing rules
+14. Dependency constraints
+15. Where things live (project tree)
+16. Workflow rules (plan → approve → log) — from global rules
+17. Communication rules (simple English) — from global rules
+18. Dos & Don'ts ("What AI agents must always / never do")
+
+---
+
+## 3. Section checklist (required vs optional)
+
+| # | Section | Required? | Thin | Thick |
+|---|---------|-----------|------|-------|
+| 1 | Title + read-first banner | **Always** | short line | short line |
+| 2 | Project identity / tech stack | **Always** | short list/table | full table |
+| 3 | Doc references table | Thin only | **yes** | n/a (no docs) |
+| 4 | Package naming | If applicable | inline | inline |
+| 5 | Hard / non-negotiable rules | If any exist | summarize + link | inline full |
+| 6 | Architecture rules | **Always** | 1 paragraph + link | inline full |
+| 7 | Build & run commands | **Always** | inline | inline |
+| 8 | Build types / flavors | If flavors used | inline or link | inline |
+| 9 | Signing / keystore | If it ships releases | link | inline |
+| 10 | Security rules | **Always** | summarize + link | inline |
+| 11 | String resources | **Always** | inline | inline |
+| 12 | Code style / naming | **Always** | short | full table |
+| 13 | Testing rules | **Always** | short + link | full |
+| 14 | Dependency constraints | If constrained | link | inline allow/block lists |
+| 15 | Where things live (tree) | Recommended | short | full |
+| 16 | Workflow rules (plan/log) | **Always** | inline (see §6) | inline (see §6) |
+| 17 | Communication rules | **Always** | inline (see §6) | inline (see §6) |
+| 18 | Dos & Don'ts | Recommended | optional | **yes** |
+
+Every Kotlin app **MUST** have a root `AGENTS.md` file. All "Always" sections in the table above must appear in every project's `AGENTS.md`, regardless of profile.
+
+---
+
+## 4. Fill-in-the-blanks template
+
+Copy this into a new project's `AGENTS.md` and replace every `<...>` placeholder. Delete any
+section that the checklist marks optional and the project does not need. Notes in `> ` blocks are
+guidance — remove them from the final file.
+
+````markdown
+# AGENTS.md — <App Name>
+
+This file is read by AI agents and LLM coding assistants (Gemini, Antigravity, Cursor, Windsurf, Codex, etc.) at the start of every session in this repository.
+Read it before making any change. <If Thin: See the docs table below for full detail.>
+
+---
+
+## Project identity
+
+| Field | Value |
+|-------|-------|
+| App name | <App Name> |
+| Type | <one-line description of what the app does> |
+| Platform | Android (minSdk <NN>, targetSdk <NN>, compileSdk <NN>) |
+| Package / namespace | <in.sreerajp.app_name> |
+| Kotlin | <2.1.x or higher> |
+| Compose BOM | <2025.x or higher> |
+| AGP | <8.x> |
+| JDK | <17> |
+| State management | <ViewModel + StateFlow / ViewModel + LiveData> |
+| Navigation | <single-Activity tab switching / Compose Navigation / none> |
+| Database | <Room / SharedPreferences / DataStore / none> |
+| Orientation | <portrait only / both> |
+| Connectivity | <fully offline — no INTERNET / online optional / online> |
+
+> Keep this table honest and current. It is the fastest way for AI agents to orient.
+
+---
+
+## Read these docs before working   <!-- Thin profile only -->
+
+| Document | Read when |
+|----------|-----------|
+| docs/architecture.md | Changing structure, screens, state, services, models, repositories |
+| docs/security.md | Touching permissions, logging, storage, crypto, manifest |
+| docs/release_process.md | Building a release, versioning, release checklist |
+| docs/kotlin_build_configuration_guide.md | Build config, signing, flavors, Gradle, ProGuard |
+| docs/kotlin_project_engineering_standard.md | Any code change — layers, naming, testing |
+| docs/GUIDELINES_MANIFEST.md | The shared Kotlin guidelines index |
+
+> If a doc is copied into this project's own `docs/`, the local copy wins over the master.
+
+---
+
+## Package naming
+
+One identifier everywhere: the source package, the build `namespace`, and the `applicationId`
+are all `<in.sreerajp.app_name>`.
+
+<If applicable:> Note that `in` is a Kotlin keyword, so it must be backticked in source — in
+every `package` line and in every import of our own code:
+
+```kotlin
+package `in`.sreerajp.app_name.ui
+import `in`.sreerajp.app_name.data.repository.AppRepository
+```
+
+---
+
+## Hard rules (must follow — these override convenience)
+
+1. <e.g. Open source only. No commercial/source-available SDKs. Check a package license first.>
+2. <e.g. Offline-first. The app works fully offline; online parts are optional.>
+3. <e.g. Never crash on bad input. Every parser has a failure path with a friendly message.>
+
+> Only list rules that are truly non-negotiable for this app. Drop this section if there are none.
+
+---
+
+## Architecture rules
+
+- Layout: <single-module MVVM under `app/src/main/java/<package>/` — config/ data/ ui/
+  services/ utils/ MainActivity.kt>. Do not restructure without instruction.
+- Layer boundaries: Composables must not know <SQL / SharedPreferences keys / file paths>.
+  ViewModels must not know <Compose imports / navigation routes>.
+- Dependency direction: <Composables → ViewModel → Repository → Database/API → Models>.
+- Models are immutable (`data class` with `copy()`). Never mutate in place.
+- <No direct DB access from Composables — go through the ViewModel/repository layer.>
+
+---
+
+## Build & run commands
+
+```bash
+./gradlew assembleDebug          # build debug APK
+./gradlew installDebug           # build + install on device/emulator
+./gradlew testDebugUnitTest      # run JVM/Robolectric unit tests
+./gradlew connectedDebugAndroidTest  # run instrumented tests
+./gradlew lint                   # Android lint (must be clean)
+```
+
+---
+
+## Build types / flavors   <!-- if flavors are used -->
+
+| Build type / flavor | App ID | Display name | Signing |
+|---------------------|--------|--------------|---------|
+| debug | <id> | <App Name> Debug | Debug keystore (automatic) |
+| release | <id> | <App Name> | Release keystore (keystore.properties) |
+
+---
+
+## Signing / keystore   <!-- if the app ships releases -->
+
+- Keystore file: `<name>.jks` at project root. Alias: `<alias>`. Keep at least one offline backup.
+- Create `keystore.properties` (gitignored — never commit).
+- `.gitignore` must include: `keystore.properties`, `*.jks`, `*.keystore`.
+
+---
+
+## Security rules
+
+- Never log secrets, keys, tokens, or decrypted data — even in debug builds.
+- <Store sensitive data in EncryptedSharedPreferences; never in plain SharedPreferences.>
+- Request only the permissions the app needs; <never add INTERNET if the app is offline>.
+- <android:allowBackup="false" must remain in the manifest.> (if applicable)
+
+---
+
+## String resources   <!-- mandatory for every app, even single-language -->
+
+- All user-visible text comes from `res/values/strings.xml` via `stringResource()` or
+  `context.getString()` — never a raw string literal in a Composable.
+- This applies even though the app ships only <en>.
+- Literals are allowed only for logs, non-UI exception messages, asset paths, route names, and
+  map/JSON keys.
+
+---
+
+## Code style / naming
+
+- Files: `PascalCase.kt` for classes, `camelCase.kt` acceptable for utility files.
+- Classes: `PascalCase`; variables/methods: `camelCase`; constants: `SCREAMING_SNAKE_CASE`.
+- Package names: `lowercase` (backtick `in` when it is part of the package path).
+- Prefer `val` over `var`, `data class` for models, `sealed class/interface` for state.
+- Run ktlint or detekt and keep Android Lint at zero errors before every commit.
+
+---
+
+## Testing rules
+
+- Mirror source package structure in `test/` (e.g. `test/<package>/data/`, `test/<package>/ui/`).
+- <Coverage target: e.g. 80% on data and domain layers.>
+- Critical areas that must be covered before release: <list them>.
+- Add or update a test whenever you add or change a ViewModel/Repository/DAO.
+
+---
+
+## Dependency constraints   <!-- if constrained -->
+
+- Blocked (never add): <e.g. network libraries for an offline app>.
+- Before adding any new dependency: check its transitive deps, state why it is
+  needed, and confirm it fits the hard rules.
+
+---
+
+## Where things live
+
+```
+AGENTS.md            # this file — project rules for AI agents / LLMs
+CLAUDE.md            # Claude Code native project rules
+docs/                # design docs (Thin profile)
+plans/               # one plan per change (see workflow rules)
+change_log/          # one log per implemented change
+app/src/main/        # app source
+app/src/test/        # unit tests (JVM/Robolectric)
+app/src/androidTest/ # instrumented tests
+```
+
+---
+
+## Workflow rules (mandatory — from global rules)
+
+Every change follows plan-before-changing and log-after-changing:
+
+1. **Plan before changing.** Write a full plan to `plans/` named
+   `yyyymmdd_hhMMss_<short-slug>.md` with a `**Status:**` line, the files to change, the issue,
+   and the fix. Then **STOP and get explicit approval** before editing/creating/deleting any
+   project file (other than the plan). A question or ambiguous reply is not approval.
+2. **Log after changing.** After implementing, write a change log to `change_log/` named
+   `yyyymmdd_hhMMss_<short-slug>.md` describing what changed and referencing its plan.
+3. **Relative paths & privacy only.** `plans/` and `change_log/` files are committed and may become
+   public on the internet. They MUST use relative repository paths only (never absolute system
+   paths like `C:\...`, `l:\...`, or `file:///...`). They MUST NOT contain any **local system
+   details** — OS user name, computer/host name, home or drive-letter paths, network share names,
+   LAN/internal IP addresses, local server URLs with ports, device serial numbers, personal email
+   addresses — or any secret (API keys, tokens, passwords, keystore passphrases, credentials, PII).
+   Write them as if a stranger will read them; nothing should reveal the machine they came from.
+
+Create `plans/` and `change_log/` if they do not exist.
+
+---
+
+## Communication rules
+
+- **Always use simple English.** Write all responses, plans, change logs, and explanations in
+  plain, simple English. Short sentences, common words. Explain any jargon you must use.
+
+---
+
+## What AI agents must always / never do   <!-- recommended, esp. Thick profile -->
+
+**Always:** <read this file first; state the target layer before adding a class; run lint +
+test after changes; keep MainActivity thin.>
+
+**Never:** <put business logic in a Composable; call a DAO from a Composable; edit generated
+Room `*_Impl` files; add a blocked dependency; log secrets.>
+````
+
+---
+
+## 5. Dual Alignment: `AGENTS.md` and `CLAUDE.md`
+
+In all Kotlin repositories, `CLAUDE.md` and `AGENTS.md` exist side-by-side as mandatory root instruction files:
+- Both files must contain identical underlying standards, rules, identity parameters, and commands.
+- `AGENTS.md` may either duplicate the content of `CLAUDE.md` or cross-reference `CLAUDE.md` while providing explicit instructions for general LLMs.
+- When updating project commands, security rules, architecture boundaries, or identity properties, update BOTH `CLAUDE.md` and `AGENTS.md` so that all AI coding assistants stay synchronized.
+
+---
+
+## 6. Sections you must always keep verbatim in spirit
+
+Two sections come from the user's global rules and must appear in **every** `AGENTS.md`, both
+profiles, worded the same in meaning:
+
+- **Workflow rules** — plan → approve → log, with relative repository paths only, no local system
+  details and no sensitive internet-inappropriate data, `plans/` and `change_log/` naming, and the
+  hard approval gate.
+- **Communication rules** — always simple English.
+
+Do not shorten these into a single link. Keep the short inline version shown in the template so AI agents always see them, even in a Thin file.
+
+---
+
+## 7. Per-section writing tips
+
+- **Read-first banner**: one or two lines. State that the file is auto-loaded and must be read before any change.
+- **Identity table**: a table beats prose. Include SDK versions, minSdk, namespace, and connectivity stance.
+- **Package naming**: mention the backtick `in` keyword requirement if applicable.
+- **Hard rules**: number them and phrase each as a testable "must".
+- **Architecture**: name exact packages and dependency directions.
+- **Commands**: copy-paste ready lines using `./gradlew` tasks.
+- **Workflow & Communication**: keep inline and verbatim in spirit.
+
+---
+
+## 8. Anti-patterns to avoid
+
+- Creating `CLAUDE.md` without creating `AGENTS.md` (both are mandatory).
+- Divergent rules between `CLAUDE.md` and `AGENTS.md` (e.g. different build commands or architecture layers).
+- Dropping workflow or communication rules.
+
+---
+
+## 9. Final self-check before saving a new `AGENTS.md`
+
+- [ ] Profile chosen (Thin or Thick) and the file matches it.
+- [ ] Both `AGENTS.md` and `CLAUDE.md` exist at the project root (**MUST**).
+- [ ] All "Always" sections from the §3 checklist are present.
+- [ ] Identity table filled with real versions, minSdk, namespace, connectivity stance.
+- [ ] Build commands are copy-paste ready and use `./gradlew` tasks.
+- [ ] Workflow rules (plan/approve/log) and simple-English rule are present, inline.
+- [ ] `plans/` and `change_log/` entries use relative paths only and contain zero local system details and zero sensitive data — safe to publish on the internet.
+- [ ] A string resources rule is present: all user-visible text comes from `res/values/strings.xml` via `stringResource()`, even if the app ships one language.
+- [ ] Every `<...>` placeholder from the template is replaced or its section deleted.
+- [ ] Rules in `AGENTS.md` match `CLAUDE.md` exactly.
