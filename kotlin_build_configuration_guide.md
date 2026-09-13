@@ -24,7 +24,7 @@ Before any build runs, the host toolchain MUST satisfy these minimums:
 | Gradle | 8.14+ | Required by AGP 8.x |
 | JDK | **Java 17** | Gradle 8.14+ and AGP 8.x require JDK 17 |
 | compileSdk | 36 (API 36) | Or the latest stable Android SDK |
-| targetSdk | 36 (API 36) | Must meet Play Store requirements |
+| targetSdk | 36 (API 36) | Must meet Play's current target API level policy — re-check before every release (`release_process.md` §9A.2) |
 | minSdk | 24 (Android 7.0) | Or higher based on app requirements |
 | Android Studio | Latest stable | For build toolchain compatibility |
 
@@ -186,6 +186,128 @@ composeCompiler {
     // reportsDestination = layout.buildDirectory.dir("compose-reports")
 }
 ```
+
+---
+
+## Languages (English, Malayalam, Sanskrit)
+
+Every app ships `en`, `ml` and `sa` with an in-app language picker
+(`kotlin_project_engineering_standard.md` section 8). These build settings are **mandatory**.
+Each one prevents a specific failure, so none of them may be removed.
+
+### `app/build.gradle.kts`
+
+```kotlin
+android {
+    defaultConfig {
+        // Keep only our three languages — library strings in other languages are
+        // stripped, so no Hindi (or other) text can appear in the app.
+        // On AGP versions that provide androidResources.localeFilters, use that
+        // instead (it replaces the deprecated resourceConfigurations).
+        resourceConfigurations += listOf("en", "ml", "sa")
+    }
+
+    androidResources {
+        // Android 13+ lists the app under system "App languages". Needs AGP 8.1+
+        // and res/resources.properties (below).
+        generateLocaleConfig = true
+        // localeFilters += listOf("en", "ml", "sa")   // newer AGP: use this line
+    }
+
+    bundle {
+        language {
+            // Play would otherwise install only the phone's language, and the
+            // in-app picker could not switch to the other two.
+            enableSplit = false
+        }
+    }
+
+    lint {
+        error += setOf(
+            "MissingTranslation",
+            "ExtraTranslation",
+            "StringFormatMatches",
+            "StringFormatCount",
+        )
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    // Lets the JVM parity and label-length tests find every module's res/ folder.
+    systemProperty("projectRoot", rootDir.absolutePath)
+}
+
+dependencies {
+    implementation(libs.androidx.appcompat)            // per-app language API
+    implementation(libs.androidx.compose.material.icons.core) // About badge heart icon
+    testImplementation(libs.icu4j)                     // label-length test (8.6)
+    testImplementation(libs.org.json)                  // JVM parsing of app_config.json (8.7)
+}
+```
+
+### `app/src/main/res/resources.properties`
+
+```properties
+unqualifiedResLocale=en
+```
+
+### Version catalog entries
+
+```toml
+[versions]
+appcompat = "1.7.1"    # Example — needs 1.6+; pin the current stable line.
+icu4j = "77.1"         # Example — pin the current stable line.
+orgJson = "20250517"   # Example — pin the current stable line.
+
+[libraries]
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
+icu4j = { group = "com.ibm.icu", name = "icu4j", version.ref = "icu4j" }
+org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
+```
+
+`material-icons-core` takes its version from the Compose BOM.
+
+### `AndroidManifest.xml`
+
+The baseline `minSdk` is 24. Below Android 13, AppCompat saves the user's language only when this
+service is declared:
+
+```xml
+<application ...>
+    <service
+        android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+        android:enabled="false"
+        android:exported="false">
+        <meta-data
+            android:name="autoStoreLocales"
+            android:value="true" />
+    </service>
+</application>
+```
+
+Do not also add `android:localeConfig` by hand while `generateLocaleConfig = true`.
+
+### Activity and theme
+
+- `MainActivity` MUST extend `AppCompatActivity` (Compose `setContent { }` works the same).
+  Below Android 13, `AppCompatDelegate.setApplicationLocales` does nothing for a plain
+  `ComponentActivity`.
+- The XML theme in `res/values/themes.xml` MUST have an AppCompat parent. The default Compose
+  project theme (`android:Theme.Material.Light.NoActionBar`) crashes `AppCompatActivity` at launch
+  with "You need to use a Theme.AppCompat theme".
+
+```xml
+<style name="Theme.MyApp" parent="Theme.AppCompat.DayNight.NoActionBar" />
+```
+
+### Verify the generated locale config
+
+Once per app, and again after an AGP upgrade: build the release bundle or APK, open it in
+Android Studio (**Build → Analyze APK**), open `AndroidManifest.xml`, follow the
+`android:localeConfig` attribute to its XML file, and confirm it lists exactly `en`, `ml` and `sa`.
+If it does not, set `generateLocaleConfig = false`, write `res/xml/locales_config.xml` by hand
+with those three locales, and point `android:localeConfig="@xml/locales_config"` at it.
 
 ---
 

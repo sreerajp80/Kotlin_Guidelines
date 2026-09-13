@@ -29,7 +29,7 @@ docs/guidelines/
 
 | Core documents | Path (from `docs/`) | What it is |
 |---|---|---|
-| Folder-structure guideline | `guidelines/guideline.md` | My personal cross-app conventions: About-screen config, the release keystore rules, and the baseline source package layout. **Source of truth for keystore rules.** |
+| Folder-structure guideline | `guidelines/guideline.md` | My personal cross-app conventions: About-screen config and its fixed "Made with ❤️ from India" badge, the three mandatory app languages (English / Malayalam / Sanskrit), the release keystore rules, and the baseline source package layout. **Source of truth for keystore rules.** |
 | Engineering standard | `guidelines/kotlin_project_engineering_standard.md` | The master, project-agnostic rulebook — rules that apply to *every* app (structure, UI, accessibility, performance, database, logging, security, CI, git, Definition of Done). |
 | Architecture blueprint | `guidelines/architecture.md` | A per-project architecture blueprint template. Fill it in with one app's actual decisions. |
 | Build configuration guide | `guidelines/kotlin_build_configuration_guide.md` | Technical reference for Gradle Kotlin DSL, product flavors, build types, signing, R8/ProGuard, and version catalogs. |

@@ -16,7 +16,10 @@ Not every rule in the 24 sections applies to every app. To keep small tools lean
    - Mandatory root `CLAUDE.md` and `AGENTS.md`
    - Plan-before-changing and log-after-changing workflow rules
    - Privacy rule for `plans/` and `change_log/` (relative paths only, no local system details, no secrets)
-   - Mandatory string externalization into `res/values/strings.xml` (even single-language apps)
+   - Three mandatory app languages — English, Malayalam and Sanskrit — with an in-app language picker (section 8)
+   - Proper Sanskrit, never Hindi, checked by a script and a shared word list (section 8.5)
+   - Short menu, button, label and tooltip text in all three languages (section 8.6)
+   - A localized tooltip on every icon-only button (section 7.7)
    - MVVM architecture with Compose and ViewModel
    - Accessibility baseline (48dp touch targets, WCAG AA contrast, TalkBack labels)
    - Room migration and database integrity rules
@@ -47,9 +50,31 @@ Not every rule in the 24 sections applies to every app. To keep small tools lean
 | State Management | Riverpod / Provider / Bloc | ViewModel + `StateFlow` / `SharedFlow` |
 | Local Storage | `sqflite` | Room database (`@Database`, `@Entity`, `@Dao`) |
 | Code Generation | `build_runner` | KSP (Kotlin Symbol Processing) |
-| Strings / Localization | `l10n.yaml` + ARB files | `res/values/strings.xml` |
+| Strings / Localization | `l10n.yaml` + `app_en.arb`, `app_ml.arb`, `app_sa.arb` | `values/`, `values-ml/`, `values-sa/` `strings.xml` |
+| In-app language switch | `LocaleController` + `MaterialApp.locale` | `AppCompatDelegate.setApplicationLocales` (needs `AppCompatActivity` + AppCompat theme) |
+| Icon-button tooltips | `tooltip:` parameter | `TooltipIconButton` wrapper around Material 3 `TooltipBox` |
 | Testing | `flutter test` | JUnit + Robolectric + Compose UI test rules |
 | Code Shrinking | `--obfuscate` | R8 / ProGuard rules (`proguard-rules.pro`) |
+
+---
+
+## The Three Languages In Plain English
+
+Every app works in **English, Malayalam and Sanskrit**. Here is what that means in practice:
+
+- **Three string files.** Every piece of text lives in `values/strings.xml` (English),
+  `values-ml/strings.xml` (Malayalam) and `values-sa/strings.xml` (Sanskrit). A new feature is not
+  finished until its text is in all three.
+- **The user chooses.** The app starts in the phone's language (or English if the phone uses a
+  different language). A picker in Settings lets the user change it, and the change applies at once.
+- **Some build settings are required.** Without them the picker silently fails, for example after
+  a Play Store install. The build configuration guide lists each setting and what it prevents.
+- **Sanskrit must be real Sanskrit.** Hindi uses the same letters, so it can look like Sanskrit.
+  A script fails the build when common Hindi words appear, and a shared word list keeps the same
+  terms in every app. A fluent reader still checks new wording.
+- **Short labels.** Buttons, menus, tabs and tooltips stay short in every language; only
+  explanations may be long.
+- **Tooltips.** Every button that shows only an icon explains itself when pressed and held.
 
 ---
 

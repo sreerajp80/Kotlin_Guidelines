@@ -21,7 +21,14 @@
    - Assemble APK (`./gradlew assembleRelease`) or bundle (`./gradlew bundleRelease`).
    - Verify signature and test artifact on a real device/emulator.
    - Tag the release in git (`git tag v1.0.0`).
-4. **Post-Release & Rollback**:
+4. **Google Play Readiness (§9A)**:
+   - Every app must always be ready to publish on Google Play, even before its first release.
+   - Build-side items (app id, target API level, App Bundle with the language split turned off, permissions) apply from day one.
+   - Play Console items (privacy policy, Data safety form, store images, English and Malayalam listings, testing track) are done before the first upload.
+   - Sanskrit cannot be a store listing language, but it still ships inside the app.
+5. **Language Checks**:
+   - Before release, open the app in English, Malayalam and Sanskrit, run the language scripts, and confirm the About screen badge.
+6. **Post-Release & Rollback**:
    - Documenting release evidence and emergency hotfix / rollback procedures.
 
 ---

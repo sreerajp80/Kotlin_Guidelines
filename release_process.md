@@ -18,6 +18,10 @@ scope clearly.
   - `Production App Extension`
   - `Sensitive Data Extension` if applicable
 
+> **Every app is always ready for Google Play**, even when its release profile is
+> `not yet shipping`. The build-time items in §9A.1–§9A.4 apply from day one. The console items in
+> §9A.5–§9A.8 MUST be done before the first upload.
+
 ---
 
 ## 2. Roles And Responsibilities
@@ -186,6 +190,39 @@ Complete these items before every release.
 - [ ] OWASP Mobile Top 10 checklist reviewed (see `security.md`).
 - [ ] Secrets, keys, and backup settings reviewed if applicable.
 
+### Localization
+
+- [ ] `values/`, `values-ml/` and `values-sa/` `strings.xml` present in every module with UI text;
+      `TranslationParityTest` passes; lint `MissingTranslation` clean and not suppressed.
+- [ ] No untranslated English value left in the Malayalam or Sanskrit files.
+- [ ] `scripts/check_sanskrit.sh` passes and glossary terms are used (engineering standard §8.5).
+- [ ] New or changed Malayalam/Sanskrit wording reviewed by a fluent reader.
+- [ ] `LabelLengthTest` passes — short labels within budget in all three languages (§8.6).
+- [ ] Every screen opened in `en`, `ml` and `sa` on a clean device — no missing glyphs, no
+      overflow, no clipped Malayalam/Devanagari letters (§8.3.4).
+- [ ] In-app language picker works: System default / English / മലയാളം / संस्कृतम्, persists across
+      restart, applies without restart, and on Android 13+ matches system "App languages" (§8.4).
+- [ ] Date and time pickers checked under `sa` — readable months, Western digits (§8.3.2).
+- [ ] A notification (if the app has any) shows in the chosen language on Android 12 or older (§8.7).
+- [ ] `scripts/check_icon_buttons.sh` passes — every icon-only control has a localized tooltip (§7.7).
+- [ ] About screen ends with the "Made with ❤️ from India" badge, red heart, localized, centered
+      (`guideline.md` §1.4).
+- [ ] Generated locale config lists exactly `en`, `ml`, `sa` (build guide, "Languages").
+
+### Google Play Store Readiness
+
+- [ ] Full §9A gate completed for this release.
+- [ ] `targetSdk` meets Play's current target API level policy (re-checked, not assumed).
+- [ ] `versionCode` strictly greater than every previously uploaded build.
+- [ ] App Bundle built with language split disabled; Play App Signing enabled; `mapping.txt` uploaded.
+- [ ] Permissions justified; `AD_ID` removed if unused; sensitive-permission declarations completed.
+- [ ] Privacy policy URL live; Data safety form matches actual behavior; content rating done.
+- [ ] Store listing assets ready at the required sizes (icon, feature graphic, screenshots).
+- [ ] English and Malayalam listings complete with screenshots in that language.
+- [ ] Internal-testing upload done; pre-launch report clean; Play-served build checked in all three
+      languages, including one different from the phone's language.
+- [ ] Staged rollout percentage chosen and Android vitals monitoring planned.
+
 ### Product And Documentation
 
 - [ ] `versionCode` and `versionName` updated in `app/build.gradle.kts`.
@@ -198,6 +235,7 @@ Complete these items before every release.
 - [ ] Intended release artifact built successfully.
 - [ ] Artifact installs and launches correctly on a clean device / emulator.
 - [ ] Version name and build number correct in the About screen.
+- [ ] About screen ends with the "Made with ❤️ from India" badge in all three languages.
 - [ ] Release build tested end-to-end (not just debug build).
 
 ---
@@ -211,9 +249,12 @@ Complete these items before every release.
 5. Run size analysis and record output.
 6. Verify `android:debuggable=false` in the merged manifest.
 7. Verify artifact naming, installability, and environment on a physical or emulated device.
-8. Archive `mapping.txt` from `app/build/outputs/mapping/release/`.
-9. Upload to the intended distribution channel.
-10. Tag the release in git: `git tag v<version>` and push.
+8. Run the language gates (`scripts/check_sanskrit.sh`, `scripts/check_icon_buttons.sh`,
+   `scripts/check_lint_suppressions.sh`) and check the app in `en`, `ml` and `sa`.
+9. Archive `mapping.txt` from `app/build/outputs/mapping/release/`.
+10. Complete the Google Play readiness gate (§9A) before uploading to Play.
+11. Upload to the intended distribution channel.
+12. Tag the release in git: `git tag v<version>` and push.
 
 ### Android Build Commands
 
@@ -253,6 +294,127 @@ splits {
     }
 }
 ```
+
+---
+
+## 9A. Google Play Store Readiness (Mandatory Gate)
+
+Every app is built to be publishable on Google Play at any time.
+
+- **Build-time items (§9A.1–§9A.4)** live in the code and build files. They MUST hold from day
+  one, even before the first release, and are re-checked before every release.
+- **Console-time items (§9A.5–§9A.8)** happen in the Play Console. They MUST be done before the
+  first upload and re-checked before every production release. Items marked *(one-time)* are set
+  up once and only re-verified afterwards.
+
+Play policies change. Values marked "at the time of writing" MUST be re-checked against the
+current Play Console Help pages before each release.
+
+### 9A.1 Application identity and versioning (build-time)
+
+| Item | Requirement |
+|---|---|
+| `applicationId` *(one-time)* | Reverse-DNS, owned domain, lowercase, permanent. It can never be changed after the first publish. Flavors may append a suffix (`.dev`), but the production id MUST have no suffix. |
+| `versionCode` | Strictly increasing integer on every upload, never reused — even for a rejected or rolled-back build. |
+| `versionName` | Matches the version shown on the About screen (`guideline.md` §1). |
+| App name | `@string/app_name` in all three `strings.xml` files (or `translatable="false"` for a brand name, recorded in `docs/architecture.md`), ≤ 30 characters to match the store title. |
+| Package visibility | If the app looks up other installed apps, declare `<queries>`. Play restricts `QUERY_ALL_PACKAGES`. |
+
+### 9A.2 API level, ABI, and compatibility (build-time)
+
+- `targetSdk` MUST meet Play's current target API level policy. At the time of writing, new apps
+  and app updates must target API 36 from 31 August 2026. Play raises this every year, so check
+  the current requirement before each release rather than trusting the value already in the
+  project.
+- `compileSdk` ≥ `targetSdk`.
+- `minSdk` is a deliberate product decision, recorded in `docs/architecture.md` §19.
+- 64-bit native code is mandatory when the app or any dependency ships native `.so` files. The App
+  Bundle includes `arm64-v8a` automatically.
+- 16 KB page-size compliance is required for apps targeting Android 15+ **when the app or any
+  dependency ships native `.so` files** (engineering standard §5.8). Apps with no native code pass
+  automatically.
+- Edge-to-edge behavior verified (engineering standard §6.7).
+
+### 9A.3 Build and signing (build-time)
+
+- Ship an **Android App Bundle (`.aab`)** from `./gradlew bundleRelease` (or `bundleProdRelease`),
+  not an APK, to Play.
+- R8 enabled for the release build (§6.1).
+- **Language split disabled** (`bundle { language { enableSplit = false } }`) and the generated
+  locale config verified (build guide, "Languages"). Without this, a Play install contains only the
+  phone's language and the in-app language picker cannot work.
+- **Play App Signing** MUST be enabled *(one-time)*. Keep the upload key backed up offline in at
+  least two places (§7). A lost upload key can be reset through Play support; a lost
+  pre-App-Signing release key cannot be recovered.
+- Signing config reads `keystore.properties` (see `guideline.md` §2), which is **never** committed.
+- Upload `mapping.txt` with every bundle so crash traces de-obfuscate. Upload native debug symbols
+  (`ndk { debugSymbolLevel = "FULL" }`) only when the app has native code.
+
+### 9A.4 Manifest, permissions, and policy (build-time)
+
+- Every permission in the merged manifest is justified and used. Remove anything a dependency
+  adds that the app does not need with `tools:node="remove"`.
+- Avoid sensitive permissions; where one is truly needed, it requires a declaration in the console
+  and is often rejected: all-files access, exact alarms, accessibility service, SMS/call log,
+  background location, `QUERY_ALL_PACKAGES`, broad photo/video access (use the system photo picker
+  instead of `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO`).
+- `com.google.android.gms.permission.AD_ID`: remove it with `tools:node="remove"` unless the app
+  shows ads or uses analytics that need the advertising ID. Libraries such as Firebase add it
+  silently.
+- Foreground services declare a `foregroundServiceType` (and need a use-case declaration in the
+  console).
+- `android:debuggable=false` (§6.4); `android:allowBackup` and `android:dataExtractionRules`
+  chosen deliberately; no cleartext traffic; no accidental `android:exported="true"`.
+- Show a clear in-app disclosure, and get consent, before collecting any personal or sensitive data.
+
+### 9A.5 Play Console declarations (console-time)
+
+- **Privacy policy URL** — reachable, public, app-specific. Required for every app, whether or not
+  it collects data.
+- **Data safety form** — matches what the app actually does, including anything a bundled SDK
+  collects. A mismatch is a policy violation.
+- **Advertising ID declaration** — answered to match the manifest (§9A.4).
+- **Content rating questionnaire** — completed.
+- **Target audience and content** — declared. If children may be in the audience, the Families
+  policy applies.
+- **Ads, government, financial features, and health declarations** — where they apply.
+- **Account deletion** — if the app lets users create an account, an in-app and a web deletion
+  path MUST exist and be declared.
+- **Developer contact details** complete. A new personal developer account must run a closed test
+  before it can publish to production (at the time of writing, at least 12 testers for 14 days
+  in a row).
+
+### 9A.6 Store listing assets (console-time)
+
+| Asset | Requirement |
+|---|---|
+| App icon | 512 × 512 PNG, 32-bit, up to 1024 KB |
+| Feature graphic | 1024 × 500, JPEG or 24-bit PNG (no alpha) |
+| Phone screenshots | 2–8, JPEG or 24-bit PNG; each side 320–3840 px; the long side at most 2× the short side |
+| Tablet screenshots | Required if the app is offered on tablets (7-inch and 10-inch sets) |
+| App title | ≤ 30 characters; no keyword stuffing, ranking claims, or price in the title |
+| Short description | ≤ 80 characters |
+| Full description | ≤ 4000 characters |
+
+### 9A.7 Listing languages (console-time)
+
+The app itself ships English, Malayalam and Sanskrit (engineering standard section 8).
+
+- The Play listing MUST be provided in **English** and **Malayalam (`ml-IN`)**, each with
+  screenshots of the real app UI in that language — not English screenshots under the Malayalam
+  listing.
+- **Sanskrit is not a Play listing language** (at the time of writing). It ships inside the app
+  only. Do not drop Sanskrit from the app because the store cannot list it.
+
+### 9A.8 Pre-launch verification (console-time)
+
+- Upload to **internal testing** first. Run the Play Console **pre-launch report** and fix all
+  crashes, ANRs, and flagged accessibility and security issues.
+- Install the build **from Play** (not a local APK) and check the primary flow in English,
+  Malayalam and Sanskrit, including switching to a language that differs from the phone's language.
+  This catches a missing language split setting (§9A.3).
+- Production starts as a **staged rollout** (e.g. 10% → 50% → 100%) with Android vitals (crash
+  rate, ANR rate) checked at each step.
 
 ---
 

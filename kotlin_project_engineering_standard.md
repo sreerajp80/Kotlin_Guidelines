@@ -482,13 +482,19 @@ Both light and dark themes MUST be checked independently.
 
 - All interactive Composables (buttons, checkboxes, switches, clickable areas) MUST have a
   `contentDescription` or `semantics { }` label.
-- Decorative images MUST use `contentDescription = null` to exclude them from TalkBack.
+- Every icon-only control MUST also show a **tooltip** with the same localized text. Use the
+  shared `TooltipIconButton` wrapper from 7.7; do not call `IconButton` directly.
+- Decorative images, and icons that sit next to a visible text label, MUST use
+  `contentDescription = null` to exclude them from TalkBack.
 - Use `Modifier.semantics { stateDescription = ... }` for custom stateful components.
+- Labels come from `strings.xml` in all three languages (section 8), so TalkBack speaks the
+  user's chosen language.
 
 ```kotlin
-Icon(
-    imageVector = Icons.Default.Delete,
-    contentDescription = stringResource(R.string.cd_delete_todo),
+TooltipIconButton(
+    icon = Icons.Default.Delete,
+    label = stringResource(R.string.tooltip_delete_todo), // tooltip + contentDescription
+    onClick = onDelete,
 )
 ```
 
@@ -521,33 +527,152 @@ a readable label and that decorative elements are excluded.
 **Font scaling verification:**
 In device Settings → Accessibility → Font size, set to the maximum and verify layouts.
 
+### 7.7 Tooltips On Icon-Only Controls (Mandatory)
+
+**Every control whose only visible content is an icon MUST have a tooltip.** An icon without a
+label is a guess for a sighted user. The tooltip explains it on long-press (touch) and on hover
+(mouse, ChromeOS), and the same text is the `contentDescription` for TalkBack.
+
+This applies to:
+
+| Control | How the tooltip is supplied |
+|---|---|
+| `IconButton`, `FilledIconButton`, `FilledTonalIconButton`, `OutlinedIconButton`, `IconToggleButton` | `TooltipIconButton` wrapper |
+| `FloatingActionButton`, `SmallFloatingActionButton`, `LargeFloatingActionButton` (icon only) | `TooltipFab` wrapper |
+| `TopAppBar` navigation icon, actions, and the overflow (⋮) button | `TooltipIconButton` for each |
+| `NavigationBarItem` / `NavigationRailItem` with `alwaysShowLabel = false` or no label | wrap the item's icon in `TooltipBox` with the destination's label |
+| Search-bar leading/trailing icons, chip and list-row trailing icon buttons | `TooltipIconButton` |
+| Custom icon-only `Modifier.clickable` elements | wrap in `TooltipBox` **and** set `Modifier.semantics { contentDescription = label; role = Role.Button }` |
+
+Rules:
+
+- The tooltip text MUST come from `strings.xml` (prefix `tooltip_` or `action_`, see 8.6), so it
+  renders in the user's chosen language like every other string.
+- The tooltip names **the action, not the icon**: "Delete note", not "Trash icon".
+- Tooltip text follows the short-label budget in 8.6.
+- A control that already shows a visible text label next to its icon (e.g. an
+  `ExtendedFloatingActionButton` with text, a `NavigationBarItem` with its label shown) does not
+  need a tooltip. Adding one is allowed but MUST NOT repeat the label word for word.
+- Never use a tooltip as the only way to get information needed to use the app — it is a hint,
+  not content.
+- Destructive actions still need a confirmation; a tooltip is not a confirmation.
+
+Reference wrapper — `ui/components/TooltipIconButton.kt`:
+
+```kotlin
+/**
+ * The only way to draw an icon-only button. [label] is shown as the tooltip and
+ * used as the contentDescription, so both are always present and localized.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TooltipIconButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = onClick, modifier = modifier, enabled = enabled) {
+            Icon(imageVector = icon, contentDescription = label)
+        }
+    }
+}
+```
+
+Write `TooltipFab` the same way around `FloatingActionButton`. Keep both wrappers in
+`ui/components/`; the CI gate in 19.4 allows raw icon-button calls only in those files.
+
+> **Version note.** `TooltipBox` needs `@OptIn(ExperimentalMaterial3Api::class)`. Newer Material 3
+> versions replace `TooltipDefaults.rememberPlainTooltipPositionProvider()` with
+> `TooltipDefaults.rememberTooltipPositionProvider(...)` that takes an anchor position. Use the
+> name your Compose BOM provides; the rule (tooltip + same localized `contentDescription`) does not
+> change.
+
+**Verification** — both are required:
+
+1. `scripts/check_icon_buttons.sh` (19.4) fails the build when a raw icon-button or icon-FAB call
+   appears outside the wrapper files.
+2. A Compose UI test helper asserts every clickable node without text has a non-empty
+   `contentDescription`. Call it in each screen test, in all three locales (18.7):
+
+```kotlin
+fun ComposeContentTestRule.assertIconOnlyControlsHaveLabels() {
+    val iconOnly = hasClickAction() and SemanticsMatcher.keyNotDefined(SemanticsProperties.Text)
+    onAllNodes(iconOnly).fetchSemanticsNodes().forEach { node ->
+        val labels = node.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() }
+        check(labels.any { it.isNotBlank() }) { "Icon-only control without a label: $node" }
+    }
+}
+```
+
 ---
 
 ## 8. Localization And Internationalization
 
-This section is `Core Baseline`: it applies to every user-facing app repository, including apps
-that ship only one language. Single-language apps MUST complete the minimum setup in 8.1 **and**
-the string externalization in 8.2.
+This section is `Core Baseline` and applies to every user-facing app repository.
+
+**Every app ships three languages: English (`en`), Malayalam (`ml`) and Sanskrit (`sa`).** There is
+no single-language app. The app starts in the system language when that is one of the three and in
+English otherwise, and the user can change the language inside the app at any time. Every feature,
+every screen, and every string the app draws — labels, menus, buttons, tooltips, dialogs,
+notifications, widgets, errors, empty states, About content — renders in the language the user
+selected.
+
+| Sub-section | Rule |
+|---|---|
+| 8.1 | Minimum build, manifest and activity setup |
+| 8.2 | String externalization — no user-visible literals |
+| 8.3 | The three languages: formatting, pickers, plurals, fonts, TalkBack |
+| 8.4 | In-app language selection, and text shown without an Activity |
+| 8.5 | Sanskrit & Malayalam quality — rules, CI gate, standard glossary |
+| 8.6 | Short UI labels vs. descriptive text |
+| 8.7 | Per-feature language completeness, background text, tests |
+| 8.8 | RTL layout support |
+| 8.9 | Locale-sensitive formatting |
 
 ### 8.1 Minimum Setup (All Apps)
 
-Every Android app MUST have `res/values/strings.xml` with all user-visible strings externalized.
-This is mandatory even for a single-language app.
+Each item below prevents a specific failure, so none of them is optional. Full Gradle, manifest,
+theme and version-catalog snippets are in `kotlin_build_configuration_guide.md`, section
+"Languages".
+
+| MUST | What goes wrong without it |
+|---|---|
+| `res/values/strings.xml` (English, default), `res/values-ml/strings.xml`, `res/values-sa/strings.xml` in **every module** that has user-visible text | The language is missing |
+| `res/resources.properties` with `unqualifiedResLocale=en`, and `androidResources { generateLocaleConfig = true }` | Android 13+ does not list the app under system "App languages" |
+| The generated locale config lists exactly `en`, `ml`, `sa` — checked once per app and after every AGP upgrade; otherwise a hand-written `res/xml/locales_config.xml` | The system screen offers wrong languages |
+| Locale filter `en`, `ml`, `sa` (`androidResources.localeFilters`, or `defaultConfig.resourceConfigurations` on AGP versions without it) | Library strings in ~80 other languages stay in the app; on a Hindi phone the date picker and dialogs show Hindi while the app shows English |
+| `bundle { language { enableSplit = false } }` | Play installs only the phone's language; picking another language in the app shows English |
+| `androidx.appcompat` 1.6+, `MainActivity : AppCompatActivity`, XML theme parent `Theme.AppCompat.DayNight.NoActionBar` (or a Material Components descendant) | Below Android 13 the language switch does nothing; with the default Compose theme, `AppCompatActivity` crashes at launch |
+| Manifest `androidx.appcompat.app.AppLocalesMetadataHolderService` with `autoStoreLocales=true` | Below Android 13 the choice is forgotten after a restart (baseline `minSdk` is 24) |
+| Lint `MissingTranslation`, `ExtraTranslation`, `StringFormatMatches`, `StringFormatCount` set to **error**, and never silenced by `tools:ignore`, `@SuppressLint`, `disable`, or a lint baseline (`scripts/check_lint_suppressions.sh`, 19.4) | Missing or broken translations ship |
 
 ### 8.2 String Externalization (Mandatory, All Apps)
 
-Every app MUST externalize its user-visible strings into `strings.xml`, **even if it supports only
-one language**. This is not optional and does not wait for a translation request.
-
-`strings.xml` is Android's native localization mechanism. Create it from day one so adding a
-language later is only a new `values-xx/strings.xml` — not a rewrite of every screen.
+Every app MUST externalize its user-visible strings into `strings.xml`. This is not optional and
+does not wait for a translation request.
 
 Required for every app:
 
-- `res/values/strings.xml` MUST exist.
-- Every user-visible string MUST be defined in `strings.xml` and read through
+- All three `strings.xml` files exist (8.1).
+- Every user-visible string is defined in `strings.xml` and read through
   `stringResource(R.string.key)` in Compose or `context.getString(R.string.key)` in Kotlin.
   A raw string literal in a Composable is not allowed.
+- Every `<string>`, `<plurals>` and `<string-array>` exists in **all three** files with a real
+  translation. An English value copied into `values-ml` or `values-sa` as a placeholder is an
+  unfinished feature, not a translation (8.7).
+- `translatable="false"` is allowed only for text that must look the same in every language: the
+  language names in the picker (8.4), brand names (including `app_name`, when the app records that
+  choice in `docs/architecture.md` §16), and symbols. Such strings live only in `values/`.
+- Translator comments (`<!-- ... -->` above a string) go in `values/strings.xml`. Say when a string
+  is short UI text, for example `<!-- Toolbar button. Keep to one or two words. -->`.
+- String names use the prefixes in 8.6, so the length budget can be checked automatically.
 
 **Narrow exceptions** — these MAY stay as plain Kotlin literals, because a user never reads them:
 
@@ -559,19 +684,970 @@ Required for every app:
 | Developer-only screens | A debug menu that never ships to users |
 
 Anything a real user reads — screen titles, buttons, labels, hints, error text shown on screen,
-empty states, snackbars, dialogs, notification text — goes in `strings.xml`.
+empty states, snackbars, dialogs, notification text, widget text — goes in `strings.xml`.
 
-### 8.3 RTL Layout Support
+Directory structure (repeat in every module with user-visible text):
+
+```text
+app/src/main/res/
+|-- values/strings.xml      # REQUIRED — English, the default
+|-- values-ml/strings.xml   # REQUIRED — Malayalam
+|-- values-sa/strings.xml   # REQUIRED — Sanskrit (Devanagari)
+`-- resources.properties    # REQUIRED — unqualifiedResLocale=en (app module)
+```
+
+**Adding a fourth language later** is a small, mechanical job, because the strings are already
+externalized:
+
+1. Add `values-<code>/strings.xml` in every module, with every string translated.
+2. Add `<code>` to the locale filter, the language picker (8.4), `formattingLocale` (8.3.1), and
+   the parity and label-length tests (8.6, 8.7).
+3. Verify the generated locale config.
+
+No screen code changes.
+
+### 8.3 The Three Mandatory Languages
+
+| Locale | Language | Script | Folder | Role |
+|---|---|---|---|---|
+| `en` | English | Latin | `values/` | Default and fallback |
+| `ml` | Malayalam | Malayalam | `values-ml/` | Full UI translation |
+| `sa` | Sanskrit | Devanagari | `values-sa/` | Full UI translation (see 8.5) |
+
+AndroidX and Material 3 ship no Sanskrit strings. Under `sa`, their built-in text falls back to the
+default English resources. Because of the locale filter (8.1), it can never fall back to Hindi.
+
+#### 8.3.1 Formatting locales
+
+Android's date and number data for `sa` is thin. Depending on the device it can produce Devanagari
+digits or placeholder month names such as `M01`. Do not test at runtime whether the device "has
+data" — use this fixed mapping everywhere a formatter needs a locale (8.9):
+
+```kotlin
+// l10n/FormattingLocale.kt
+/**
+ * Locale handed to date, time and number formatters. The UI text stays in the
+ * user's language; only formatting data is chosen here. Never falls back to Hindi.
+ */
+fun formattingLocale(appLocale: Locale): Locale = when (appLocale.language) {
+    "ml" -> Locale.forLanguageTag("ml-IN-u-nu-latn")
+    "en" -> Locale.Builder().setLocale(appLocale).setUnicodeLocaleKeyword("nu", "latn").build()
+    else -> Locale.forLanguageTag("en-u-nu-latn") // "sa" and anything unexpected
+}
+```
+
+- `en` keeps the system region when the system language is English (for example `en-IN` date
+  order); `ml` uses `ml-IN`; `sa` uses English formatting.
+- Digits are Western (0–9) in all three languages (`nu-latn`), unless the app records a different
+  decision in `docs/architecture.md` §16.
+- Build locales with `Locale.forLanguageTag` or `Locale.Builder`, not the deprecated `Locale(...)`
+  constructors.
+
+#### 8.3.2 Material 3 date and time pickers
+
+`DatePicker`, `DateRangePicker` and `TimePicker` format months and digits from the configuration
+locale, not from `formattingLocale`. They MUST be checked under `sa` (18.7). If months or digits
+look wrong, run the picker with the formatting locale:
+
+```kotlin
+// l10n/WithFormattingLocale.kt
+/** Runs [content] with the formatting locale, so Material pickers format correctly under `sa`. */
+@Composable
+fun WithFormattingLocale(content: @Composable () -> Unit) {
+    val configuration = LocalConfiguration.current
+    val context = LocalContext.current
+    val formattingConfig = remember(configuration) {
+        Configuration(configuration).apply { setLocale(formattingLocale(configuration.locales[0])) }
+    }
+    val formattingContext = remember(context, formattingConfig) {
+        context.createConfigurationContext(formattingConfig)
+    }
+    CompositionLocalProvider(
+        LocalConfiguration provides formattingConfig,
+        LocalContext provides formattingContext,
+    ) { content() }
+}
+```
+
+- Wrap only the picker and its state (call `rememberDatePickerState()` inside the wrapper), not the
+  whole dialog.
+- Resolve your own strings (title, confirm and dismiss buttons) **outside** the wrapper and pass
+  them in. Inside it, `stringResource` returns English.
+- If your Material 3 version lets you pass a locale to the picker state directly, that is equally
+  acceptable.
+
+#### 8.3.3 Plurals
+
+Android may have no plural rules for `sa`, so it may only ever use the `other` form. Every
+`<plurals>` entry MUST have an `other` item that reads correctly for any number, in all three
+files. Malayalam uses `one` and `other`.
+
+#### 8.3.4 Fonts and script coverage
+
+Most Android devices draw Malayalam and Devanagari, but not every manufacturer's image draws them
+fully, and a missing glyph shows as an empty box — a silent, ship-blocking bug for two of our three
+languages.
+
+- Before every release, open every screen in `ml` and in `sa` on a clean device, including the
+  oldest supported Android version, and confirm: no boxes, no clipped tall letters (both scripts
+  are taller than Latin), no overflow.
+- Never fix text container heights (7.4); let text wrap.
+- If glyphs are missing or broken, bundle Noto Sans Malayalam and Noto Sans Devanagari in
+  `res/font/` and use them in the typography for those languages (17.4 licensing).
+- Record the font decision in `docs/architecture.md` §16.
+
+#### 8.3.5 TalkBack, text input, and the launcher label
+
+- Language names in the picker are written in their own script. Their text SHOULD carry a locale
+  span (`SpanStyle(localeList = LocaleList("ml"))`) so TalkBack pronounces them correctly.
+- Text fields where the user types Malayalam or Sanskrit SHOULD set
+  `KeyboardOptions(hintLocales = LocaleList(...))` (Compose 1.8+), so the keyboard offers that
+  language.
+- The label under the launcher icon follows the **system** language, not the in-app choice.
+  Android controls this; it is an accepted exception (8.7).
+
+### 8.4 In-App Language Selection (Mandatory)
+
+The language is the user's choice, not the device's alone.
+
+**Resolution order:**
+
+1. The language the user picked inside the app, if any.
+2. Otherwise the first language in the phone's language list that is `en`, `ml` or `sa`.
+3. Otherwise English.
+
+Steps 2 and 3 happen automatically because of the locale filter and the English default `values/`
+folder (8.1). The app does not code them.
+
+Rules:
+
+- Set the language with `AppCompatDelegate.setApplicationLocales(...)` on the main thread. An empty
+  list means **System default**. Read it with `AppCompatDelegate.getApplicationLocales()`.
+- Android 13+ saves the choice itself; below Android 13, AppCompat saves it (`autoStoreLocales`,
+  8.1). **The app MUST NOT keep its own copy as the source of truth** — two copies drift apart, for
+  example when the user changes the language in system settings. The only allowed copy is the
+  read-only background mirror in 8.4.2.
+- Below Android 13, AppCompat loads the saved choice from disk when the first Activity is created.
+  StrictMode reports this disk read; it is expected. Call `getApplicationLocales()` after
+  `MainActivity.onCreate`, never in `Application.onCreate`.
+- A change applies **at once and app-wide**; the user is never asked to restart. The Activity is
+  recreated, so screen state MUST live in a ViewModel or `rememberSaveable`, and the user MUST stay
+  on the same screen (Navigation Compose keeps the back stack across recreation).
+- The picker MUST live in Settings, MUST offer **System default** as the first option, and MUST
+  list each language in its own script (its endonym), not translated:
+
+  | Option | Shown as |
+  |---|---|
+  | System default | localized: "System default" / "സിസ്റ്റം സ്വതവേ" / "तन्त्रसिद्धम्" |
+  | English | `English` |
+  | Malayalam | `മലയാളം` |
+  | Sanskrit | `संस्कृतम्` |
+
+- The current choice MUST be visibly marked (radio button), and the Settings row MUST tell TalkBack
+  the current value.
+- All language reads and writes go through one `LanguageRepository`. Screens MUST NOT call
+  `AppCompatDelegate` directly.
+
+#### 8.4.1 Reference implementation
+
+```kotlin
+// l10n/LanguageRepository.kt
+enum class AppLanguage(val tag: String?) {
+    SYSTEM(null), ENGLISH("en"), MALAYALAM("ml"), SANSKRIT("sa"),
+}
+
+class LanguageRepository(private val appContext: Context) {
+
+    /** Call after MainActivity.onCreate (see 8.4). */
+    fun current(): AppLanguage {
+        val language = AppCompatDelegate.getApplicationLocales()[0]?.language
+        return AppLanguage.entries.firstOrNull { it.tag == language } ?: AppLanguage.SYSTEM
+    }
+
+    fun set(language: AppLanguage) {
+        val locales = language.tag?.let { LocaleListCompat.forLanguageTags(it) }
+            ?: LocaleListCompat.getEmptyLocaleList()
+        BackgroundLanguageMirror.write(appContext, language.tag) // 8.4.2
+        AppCompatDelegate.setApplicationLocales(locales)
+        NotificationChannels.register(appContext)                // 8.7
+    }
+}
+```
+
+```xml
+<!-- values/strings.xml — endonyms look the same in every language, so they are not translated -->
+<string name="language_name_en" translatable="false">English</string>
+<string name="language_name_ml" translatable="false">മലയാളം</string>
+<string name="language_name_sa" translatable="false">संस्कृतम्</string>
+```
+
+```kotlin
+// ui/screens/settings/LanguagePicker.kt
+@Composable
+fun LanguagePicker(selected: AppLanguage, onSelect: (AppLanguage) -> Unit) {
+    val options = listOf(
+        AppLanguage.SYSTEM to stringResource(R.string.label_system_default),
+        AppLanguage.ENGLISH to stringResource(R.string.language_name_en),
+        AppLanguage.MALAYALAM to stringResource(R.string.language_name_ml),
+        AppLanguage.SANSKRIT to stringResource(R.string.language_name_sa),
+    )
+    Column(Modifier.selectableGroup()) {
+        options.forEach { (language, name) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = language == selected,
+                        onClick = { onSelect(language) },
+                        role = Role.RadioButton,
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = language == selected, onClick = null)
+                Spacer(Modifier.width(16.dp))
+                Text(name)
+            }
+        }
+    }
+}
+```
+
+#### 8.4.2 Text shown without an Activity (below Android 13)
+
+Below Android 13, AppCompat applies the chosen language to Activities only, and it loads the saved
+choice only when the first Activity is created. Code that runs without an Activity —
+notifications, WorkManager jobs, widgets, services, anything using `applicationContext` — would
+otherwise use the system language.
+
+Rules:
+
+- `LanguageRepository.set` writes a **read-only mirror** of the choice for background code.
+  `MainActivity.onCreate` overwrites the mirror from `getApplicationLocales()`, so the mirror
+  always follows AppCompat, never the other way round.
+- Background code gets its strings from `context.localizedContext()`, never straight from
+  `applicationContext`.
+- On Android 13+ the platform applies the language to the whole app, so the helper returns the
+  context unchanged.
+
+```kotlin
+// l10n/LocalizedContext.kt
+object BackgroundLanguageMirror {
+    private const val PREFS = "background_language_mirror"
+    private const val KEY = "language_tag"
+
+    fun write(context: Context, tag: String?) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, tag).apply()
+    }
+
+    fun read(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
+}
+
+/** A context whose resources use the in-app language, for code without an Activity. */
+fun Context.localizedContext(): Context {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return this
+    val tag = BackgroundLanguageMirror.read(this) ?: return this // System default
+    val config = Configuration(resources.configuration).apply {
+        setLocales(LocaleList.forLanguageTags(tag))
+    }
+    return createConfigurationContext(config)
+}
+```
+
+```kotlin
+class MainActivity : AppCompatActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        BackgroundLanguageMirror.write(this, AppCompatDelegate.getApplicationLocales()[0]?.language)
+        enableEdgeToEdge()
+        setContent { AppTheme { AppNavHost() } }
+    }
+}
+```
+
+### 8.5 Sanskrit & Malayalam Quality — Standard UI Glossary
+
+Every app ships three languages: English, Malayalam, and Sanskrit (8.3). Both Malayalam and Sanskrit
+demand deliberate linguistic care to avoid common pitfalls: Hindi leakage in Sanskrit due to the
+shared Devanagari script, and awkward English transliterations or calques in Malayalam.
+
+#### 8.5.1 Sanskrit Quality Rules (Pure Sanskrit, Never Hindi)
+
+Sanskrit's derivational system — verbal roots (`धातु`), prefixes (`उपसर्ग`), suffixes
+(`कृत्` / `तद्धित प्रत्यय`), and compounds (`समास`) — can derive a term for any UI concept.
+
+Because Sanskrit and Hindi share the Devanagari script, Hindi text *looks* like Sanskrit to anyone
+who does not read it. Never use Hindi anywhere as a substitute, crutch, or fallback for Sanskrit.
+`values-sa/strings.xml` MUST be authentic, uncompromised Sanskrit.
+
+- **Classical vocabulary and grammar**: Use authentic Sanskrit nominal stems, proper case endings,
+  and correct verbal forms (e.g. polite passive imperative `परिवर्त्यताम्`, not Hindi `बदलें`).
+- **No transliterated English loans**: Never transliterate English words into Devanagari when a
+  standard Sanskrit word exists (`सेटिंग्स` is Hindi/English in Devanagari; use `विन्यासः`).
+- **No Hindi function words or syntax**: Do not use Hindi postpositions (`का`, `की`, `के`, `को`,
+  `में`, `से`, `पर`), copulas (`है`, `हैं`, `था`, `थे`, `थी`, `हूं`), or verb endings (`करें`,
+  `करना`, `रहा`, `गया`, `चाहिए`).
+- **No nukta consonants**: The Perso-Arabic consonants with nukta (`क़`, `ख़`, `ग़`, `ज़`, `ड़`, `ढ़`,
+  `फ़`) do not occur in Sanskrit.
+- **Strict grammatical agreement**: Participles and adjectives must agree with their subject in
+  gender and case. In "No data found", `दत्तांशः` is masculine nominative, so the participle must be
+  `प्राप्तः` and the indefinite pronoun `कोऽपि`: `न कोऽपि दत्तांशः प्राप्तः` (never neuter `न किमपि दत्तांशं प्राप्तम्`).
+- **Valid morphological derivation**:
+  - Do not invent verbs by slapping verbal endings onto nouns. "Copy" is `प्रतिलिख्यताम्` (from verb
+    root `लिख्` with `प्रति`) or `प्रतिलिपिः क्रियताम्`, never pseudo-verb `प्रतिलिप्यताम्`.
+  - The past passive participle for "Copied" is `प्रतिलिखितम्` (or `प्रतिलिपीकृतम्`), never `प्रतिलिपितम्`.
+  - Causative passive of `या` (go) is `निर्याप्यते` / `निर्याप्यताम्` (Export), never `निर्यात्यताम्`.
+  - "Confirm" is `स्थिरीक्रियताम्` or `दृढीक्रियताम्` (let it be made firm), never `संपुष्यताम्` (which means "let it be nourished").
+  - Do not use Hindi loanwords for concepts that have native Sanskrit terms (use `उपयोक्तृविवरणम्` for Account, never Hindi `खाता`; `लेखा` strictly means a line/furrow).
+  - Use `ध्वनिः` for audio/sound to avoid confusion with `शब्दः` (Word).
+- **Form conventions**:
+  - A button or menu item (action commanding the app): polite `-ताम्` imperative (`लोट्`). For a verb
+    that takes an object it is passive (`कर्मणि`), e.g. `रक्ष्यताम्` (Save), `अन्विष्यताम्` (Search); for a
+    verb that takes no object it is impersonal (`भावे`), e.g. `निष्क्रम्यताम्` (Exit).
+  - A title, tab, label, heading, or status: nominal / abstract noun, e.g. `अन्वेषणम्` (Search), `विन्यासः` (Settings).
+  - A confirmation or boolean response: indeclinable, e.g. `आम्` (Yes), `न` (No), `अस्तु` (OK).
+  - Direction words (Back, Next, Previous, More) are nominal or adverbial labels and MAY keep that
+    form on a button, like Yes / No. Close and Exit are actions: on a button they MUST use the
+    imperative (`पिधीयताम्`, `निष्क्रम्यताम्`); the nominal form (`निष्क्रमणम्`) is for titles and labels.
+- **Punctuation**: Use the **daṇḍa** `।` to end a sentence in descriptive prose; UI labels take no terminator.
+- **File location**: Sanskrit strings live in `values-sa/strings.xml` of every module that has
+  user-visible text, plus `sa` values in `app_config.json` and `*_sa.*` content assets.
+- **Pre-release review**: Machine translation tools commonly output Hindi for Sanskrit requests. All
+  Sanskrit strings MUST be reviewed by a fluent reader before release.
+
+**Forbidden markers.** None of these tokens may appear anywhere in Sanskrit text
+(`values-sa/*.xml`, `sa` values in `app_config.json`, `*_sa.*` assets). They are reliable
+Hindi giveaways and make a good grep-based gate:
+
+```text
+है  हैं  था  थे  थी  हूं  हो  करें  करना  करके  रहा  रही  रहे  गया  गयी  चाहिए
+नहीं  और  लेकिन  क्या  आपका  आपकी  आपके  हमारा  मेरा  कृपया  सेटिंग्स  ऐप
+◌़ (nukta U+093C, and the precomposed nukta letters U+0958–U+095F)
+```
+
+`scripts/check_sanskrit.sh` — required in every app, run in CI (19.4):
+
+```bash
+#!/usr/bin/env bash
+# Fail when a Hindi marker appears in Sanskrit text (standard 8.5).
+# Scans every module's values-sa/*.xml, app_config.json (only its "sa" values are
+# Devanagari), and *_sa.* asset files (including Markdown help pages).
+# Standalone words are matched between word edges: whitespace, quotes, brackets,
+# punctuation, daṇḍa, XML/HTML tag edges (< >), and Markdown marks (* _ ` # | : ; ~ -).
+set -u
+PATTERN='(?<=[\s"'\''([{<>।,*_`#|:;~-]|^)(?:था|थे|थी|हो|है|हैं|हूं|और)(?=[\s"'\''\)\]}<>।,.\?!*_`#|:;~-]|$)|करें|करना|करके|रहा|रही|रहे|गया|गयी|चाहिए|नहीं|लेकिन|क्या|कृपया|सेटिंग्स|ऐप|\x{093C}|[\x{0958}-\x{095F}]'
+
+mapfile -t FILES < <(find . -path '*/build' -prune -o -type f \( \
+    -path '*/src/main/res/values-sa/*.xml' -o \
+    -path '*/src/main/assets/*_sa.*' -o \
+    -path '*/src/main/assets/config/app_config.json' \) -print)
+
+if [ "${#FILES[@]}" -eq 0 ]; then
+  echo 'No Sanskrit files found — every app ships values-sa/strings.xml.'; exit 1
+fi
+
+# Self-test: the pattern must still catch a Hindi copula in XML, JSON and Markdown text.
+for sample in '<string name="x">है</string>' '"sa": "है"' 'यह **है**' 'यह `है`' 'वह *था*'; do
+  if ! printf '%s\n' "$sample" | LC_ALL=C.UTF-8 grep -qP "$PATTERN"; then
+    echo "check_sanskrit.sh self-test failed on: $sample"; exit 1
+  fi
+done
+
+if LC_ALL=C.UTF-8 grep -nP "$PATTERN" "${FILES[@]}"; then
+  echo 'Hindi markers found in Sanskrit text (standard 8.5).'; exit 1
+fi
+exit 0
+```
+
+> The gate is a smoke test, not a proof of correctness: passing it means no obvious Hindi marker is
+> present, not that the Sanskrit is good. A fluent reader still reviews the text.
+> Standalone words (था, थे, थी, हो, है, हैं, हूं, और) match only between word edges: whitespace,
+> quotes, brackets, punctuation (including the daṇḍa `।`), the tag edges `<` and `>`, and the
+> Markdown marks `*`, `_`, `` ` ``, `#`, `|`, `:`, `;`, `~`, `-`. So `<string name="x">है</string>`
+> and `यह **है**` in a help file always fail the build, while legitimate Sanskrit such as
+> `स्थाप्यताम्`, `स्थानम्`, `पुनःस्थाप्यताम्`, `यथा`, `तथा` and `कथा` never does.
+
+#### 8.5.2 Malayalam Quality Rules (Natural Malayalam, Not English Transliterations)
+
+Malayalam UI strings must sound natural and idiomatic to native Malayalam speakers.
+
+- **Avoid lazy English transliterations; established loanwords allowed**: Do not phonetically
+  transliterate English UI jargon into Malayalam script when standard, authentic Malayalam words exist.
+  - Save: `സൂക്ഷിക്കുക` (never bare `സേവ്`).
+  - Print: `അച്ചടിക്കുക` (never `പ്രിന്റ്`).
+  - Vibration: `കമ്പനം` (never `വൈബ്രേഷൻ`).
+  - Optional: `ഐച്ഛികം` (never `ഓപ്ഷണൽ`).
+  - Number: `സംഖ്യ` (never `നമ്പർ`).
+  - Page: `താൾ` (never `പേജ്`).
+  - Widely established digital loanwords (such as `ഹോം`, `മെനു`, `പ്രൊഫൈൽ`, `അക്കൗണ്ട്`, `ഡൗൺലോഡ്`,
+    `ഓഫ്‌ലൈൻ`, `തീം`, `ഫയൽ`, `ഫോൾഡർ`, `ലിങ്ക്`, `ലൈസൻസ്`) are accepted where no single native term
+    carries universal recognition.
+- **Action buttons use verb forms**: Action buttons commanding an operation MUST use the verbal
+  form ending in `-ക്കുക` / `-ക` (`തിരുത്തുക`, `സൂക്ഷിക്കുക`, `നീക്കുക`, `തുറക്കുക`, `പുറത്തുകടക്കുക`,
+  `ലോഗൗട്ട് ചെയ്യുക`), never a bare English noun or uninflected loan.
+- **Accurate negation (`ഇല്ല` vs `അല്ല`)**:
+  - `ഇല്ല` denotes non-existence, absence, or refusal to perform an action. For confirmation dialog
+    action buttons (Yes / No), use **`അതെ` / `ഇല്ല`**.
+  - `അല്ല` denotes negation of identity or qualification ("is not", e.g. `ശരിയല്ല`). Do not put
+    `അല്ല` on a confirmation prompt's "No" button when the dialog asks if an action should be done.
+- **Avoid ungrammatical standalone postpositions**: Postpositions like `കുറിച്ച്` govern an accusative
+  noun (e.g. `ആപ്പിനെക്കുറിച്ച്`); standing alone as a screen title or heading, `കുറിച്ച്` is
+  ungrammatical. Use `ആപ്പിനെക്കുറിച്ച്` for "About"; `വിവരണം` is reserved for Description.
+- **Contextual accuracy over literal calques**:
+  - Preferences: `താൽപ്പര്യങ്ങൾ` or `ഇഷ്ടങ്ങൾ` (matches Sanskrit `रुचयः`). `മുൻഗണനകൾ` strictly means
+    **Priorities** (precedence/rank) and is a misleading false friend.
+  - Apply (theme/filters): `പ്രയോഗിക്കുക` or `നടപ്പിലാക്കുക`. `ബാധകമാക്കുക` means legal liability/enforcement.
+  - Sort: `ക്രമീകരിക്കുക` (arrange in order / sort sequence). `അടുക്കുക` means to stack or draw near.
+- **Modern Unicode orthography**: Always use standard Unicode Malayalam atomic chillu characters (`ൺ`, `ൻ`, `ർ`, `ൽ`, `ൾ`). Avoid legacy ZWJ sequences or non-standard glyphs.
+
+#### 8.5.3 Bad → Good Translations
+
+| English | Bad (Hindi / English loan / Calque) | Good (Sanskrit) | Good (Malayalam) | Linguistic Rationale |
+|---|---|---|---|---|
+| Settings | सेटिंग्स / സെറ്റിംഗ്സ് | विन्यासः | ക്രമീകരണങ്ങൾ | Standard native terminology |
+| Save | सेव करें / സേവ് | रक्ष्यताम् | സൂക്ഷിക്കുക | Polite imperative in SA; `-ക്കുക` verb in ML |
+| Delete | डिलीट करें / ഡിലീറ്റ് | लुप्यताम् / विलुप्यताम् | ഇല്ലാതാക്കുക | Authentic verbal action |
+| Cancel | कैंसिल / ക്യാൻസൽ | निरस्यताम् | റദ്ദാക്കുക | Native rejection/dismissal term |
+| Copy | कॉपी करें / കോപ്പി | प्रतिलिख्यताम् | പകർത്തുക | `प्रति + लिख्` verb in SA; NOT `प्रतिलिप्यताम्` |
+| Export | निर्यात करें / എക്സ്പോർട്ട് | निर्याप्यताम् | കയറ്റുമതി ചെയ്യുക | Correct causative passive of `या` in SA |
+| Search | खोजें / സെർച്ച് | अन्वेषणम् (title) / अन्विष्यताम् (action) | തിരയുക | Distinct noun title vs. action button |
+| No data found | कोई डेटा नहीं मिला / ഡാറ്റ ഇല്ല | न कोऽपि दत्तांशः प्राप्तः | വിവരങ്ങളൊന്നും കണ്ടെത്തിയില്ല | Gender agreement in SA (`दत्तांशः` masculine nom.) |
+| Preferences | प्रेफरेंसेस / മുൻഗണനകൾ | रुचयः | താൽപ്പര്യങ്ങൾ / ഇഷ്ടങ്ങൾ | `മുൻഗണനകൾ` means priorities, not preferences |
+| Confirm | संपुष्यताम् / കൺഫേം | स्थिरीक्रियताम् / दृढीक्रियताम् | സ്ഥിരീകരിക്കുക | `पुष्` means nourish; `स्थिरी` means confirm |
+| Print | प्रिंट करें / പ്രിന്റ് | मुद्र्यताम् | അച്ചടിക്കുക | Standard Malayalam verb |
+| About | ऐप के बारे में / കുറിച്ച് / परिचयः | विषयपरिचयः | ആപ്പിനെക്കുറിച്ച് | `കുറിച്ച്` is a bound postposition, not a title; `विषये` is locative ("regarding"). One term per meaning: `परिचयः` is Profile and `വിവരണം` is Description (8.5.4). |
+
+#### 8.5.4 Standard UI Glossary
+
+Use these exact terms across all apps, in all three languages. When a term you need is missing, add it
+**here**, in this standard, rather than inventing inconsistent per-app variants. All short UI terms
+fit the 8.6 budget (checked with the stricter count described there).
+
+**Review rule.** A new or changed Malayalam or Sanskrit glossary term MUST be reviewed by a fluent
+reader before any app uses it. The change that adds the term lists it in its change log as
+"needs native-reader review" until that review is done.
+
+##### Navigation and structure
+
+| English | Malayalam | Sanskrit |
+|---|---|---|
+| Home | ഹോം | गृहम् |
+| Back | പിന്നോട്ട് | प्रत्यागमनम् |
+| Next | അടുത്തത് | अग्रिमम् |
+| Previous | മുമ്പത്തേത് | पूर्वम् |
+| Menu | മെനു | सूची |
+| More | കൂടുതൽ | अधिकम् |
+| Close | അടയ്ക്കുക | पिधीयताम् |
+| Exit (button) | പുറത്തുകടക്കുക | निष्क्रम्यताम् |
+| Exit (title, label) | പുറത്തുകടക്കൽ | निष्क्रमणम् |
+| Profile | പ്രൊഫൈൽ | परिचयः |
+| Notifications | അറിയിപ്പുകൾ | सूचनाः |
+| Favorites | പ്രിയപ്പെട്ടവ | प्रियाणि |
+| History | നാൾവഴി | इतिवृत्तम् |
+| Details | വിശദാംശങ്ങൾ | विवरणम् |
+| List | പട്ടിക | आवली |
+| Category | വിഭാഗം | वर्गः |
+| Page | താൾ | पृष्ठम् |
+| Section | ഖണ്ഡം | खण्डः |
+
+##### Actions (buttons, menu items)
+
+| English | Malayalam | Sanskrit |
+|---|---|---|
+| Save | സൂക്ഷിക്കുക | रक्ष्यताम् |
+| Cancel | റദ്ദാക്കുക | निरस्यताम् |
+| Delete | ഇല്ലാതാക്കുക | लुप्यताम् |
+| Edit | തിരുത്തുക | सम्पाद्यताम् |
+| Add | ചേർക്കുക | योज्यताम् |
+| Remove | നീക്കുക | अपनीयताम् |
+| Create | സൃഷ്ടിക്കുക | सृज्यताम् |
+| Update | നവീകരിക്കുക | अद्यतनीक्रियताम् |
+| Copy | പകർത്തുക | प्रतिलिख्यताम् |
+| Paste | ഒട്ടിക്കുക | स्थाप्यताम् |
+| Undo | പഴയപടിയാക്കുക | प्रत्यावर्त्यताम् |
+| Redo | വീണ്ടും ചെയ്യുക | पुनःक्रियताम् |
+| Search | തിരയുക | अन्विष्यताम् |
+| Filter | അരിക്കുക | परिशोध्यताम् |
+| Sort | ക്രമീകരിക്കുക | क्रमीक्रियताम् |
+| Refresh | പുതുക്കുക | नवीक्रियताम् |
+| Share | പങ്കിടുക | वितीर्यताम् |
+| Send | അയയ്ക്കുക | प्रेष्यताम् |
+| Download | ഡൗൺലോഡ് ചെയ്യുക | अवतार्यताम् |
+| Upload | അപ്‌ലോഡ് ചെയ്യുക | आरोप्यताम् |
+| Import | ഇറക്കുമതി ചെയ്യുക | आनीयताम् |
+| Export | കയറ്റുമതി ചെയ്യുക | निर्याप्यताम् |
+| Print | അച്ചടിക്കുക | मुद्र्यताम् |
+| Select | തിരഞ്ഞെടുക്കുക | चीयताम् |
+| Select all | എല്ലാം തിരഞ്ഞെടുക്കുക | सर्वं चीयताम् |
+| Clear | മായ്ക്കുക | रिक्तीक्रियताम् |
+| Reset | പുനഃസജ്ജമാക്കുക | पुनःसज्जीक्रियताम् |
+| Confirm | സ്ഥിരീകരിക്കുക | स्थिरीक्रियताम् |
+| Apply | പ്രയോഗിക്കുക | प्रयुज्यताम् |
+| Open | തുറക്കുക | उद्घाट्यताम् |
+| Start | ആരംഭിക്കുക | आरभ्यताम् |
+| Stop | നിർത്തുക | विरम्यताम् |
+| Pause | നിർത്തിവയ്ക്കുക | स्थग्यताम् |
+| Resume | പുനരാരംഭിക്കുക | पुनरारभ्यताम् |
+| Continue | തുടരുക | अनुवर्त्यताम् |
+| Skip | ഒഴിവാക്കുക | त्यज्यताम् |
+| Retry | വീണ്ടും ശ്രമിക്കുക | पुनः प्रयत्यताम् |
+| Login | പ്രവേശിക്കുക | प्रविश्यताम् |
+| Logout | ലോഗൗട്ട് ചെയ്യുക | निर्गम्यताम् |
+
+##### Settings and preferences
+
+| English | Malayalam | Sanskrit |
+|---|---|---|
+| Settings | ക്രമീകരണങ്ങൾ | विन्यासः |
+| Preferences | താൽപ്പര്യങ്ങൾ | रुचयः |
+| Language | ഭാഷ | भाषा |
+| Theme | തീം | रूपविन्यासः |
+| Dark mode | ഇരുണ്ട രൂപം | श्यामरूपम् |
+| Light mode | തെളിഞ്ഞ രൂപം | दीप्तरूपम् |
+| System default | സിസ്റ്റം സ്വതവേ | तन्त्रसिद्धम् |
+| Font size | അക്ഷരവലുപ്പം | अक्षरपरिमाणम् |
+| Sound | ശബ്ദം | ध्वनिः |
+| Vibration | കമ്പനം | कम्पनम् |
+| Backup | കരുതൽശേഖരം | प्रतिलिपिरक्षणम् |
+| Restore | പുനഃസ്ഥാപിക്കുക | पुनःस्थाप्यताम् |
+| Permissions | അനുമതികൾ | अनुमतयः |
+| Account | അക്കൗണ്ട് | उपयोक्तृविवरणम् |
+| Privacy | സ്വകാര്യത | गोपनीयता |
+| Security | സുരക്ഷ | सुरक्षा |
+| Storage | സംഭരണം | सङ्ग्रहः |
+| Data | വിവരങ്ങൾ | दत्तांशः |
+
+##### Status, feedback, and empty states
+
+| English | Malayalam | Sanskrit |
+|---|---|---|
+| Loading | ലോഡുചെയ്യുന്നു | आपूर्यते |
+| Please wait | കാത്തിരിക്കുക | प्रतीक्ष्यताम् |
+| Success | വിജയം | सफलम् |
+| Failed | പരാജയപ്പെട്ടു | असफलम् |
+| Error | പിശക് | दोषः |
+| Warning | മുന്നറിയിപ്പ് | पूर्वसूचना |
+| Information | വിവരം | सूचना |
+| Done | പൂർത്തിയായി | समाप्तम् |
+| Empty | ശൂന്യം | रिक्तम् |
+| No results | ഫലങ്ങളില്ല | न किमपि प्राप्तम् |
+| Offline | ഓഫ്‌ലൈൻ | असंयुक्तम् |
+| Online | ഓൺലൈൻ | संयुक्तम् |
+| Saved | സൂക്ഷിച്ചു | रक्षितम् |
+| Deleted | ഇല്ലാതാക്കി | लुप्तम् |
+| Copied | പകർത്തി | प्रतिलिखितम् |
+| Updated | നവീകരിച്ചു | अद्यतनीकृतम् |
+| Required | ആവശ്യം | आवश्यकम् |
+| Optional | ഐച്ഛികം | वैकल्पिकम् |
+| Invalid | അസാധു | अमान्यम् |
+
+##### Time and date
+
+| English | Malayalam | Sanskrit |
+|---|---|---|
+| Date | തീയതി | दिनाङ्कः |
+| Time | സമയം | समयः |
+| Today | ഇന്ന് | अद्य |
+| Yesterday | ഇന്നലെ | ह्यः |
+| Tomorrow | നാളെ | श्वः |
+| Now | ഇപ്പോൾ | इदानीम् |
+| Day | ദിവസം | दिनम् |
+| Week | ആഴ്ച | सप्ताहः |
+| Month | മാസം | मासः |
+| Year | വർഷം | वर्षम् |
+| Duration | ദൈർഘ്യം | कालावधिः |
+
+##### Content and fields
+
+| English | Malayalam | Sanskrit |
+|---|---|---|
+| Title | ശീർഷകം | शीर्षकम् |
+| Name | പേര് | नाम |
+| Description | വിവരണം | वर्णनम् |
+| Note | കുറിപ്പ് | टिप्पणी |
+| Text | പാഠം | पाठः |
+| Image | ചിത്രം | चित्रम् |
+| Audio | ഓഡിയോ | श्रव्यम् |
+| Video | വീഡിയോ | दृश्यम् |
+| File | ഫയൽ | सञ्चिका |
+| Folder | ഫോൾഡർ | संपुटम् |
+| Document | രേഖ | लेखः |
+| Link | ലിങ്ക് | अनुबन्धः |
+| Word | വാക്ക് | शब्दः |
+| Line | വരി | पङ्क्तिः |
+| Number | സംഖ്യ | सङ्ख्या |
+| Total | ആകെ | योगः |
+| Count | എണ്ണം | गणना |
+| Size | വലുപ്പം | परिमाणम् |
+| Type | തരം | प्रकारः |
+| Status | നില | स्थितिः |
+
+##### Confirmation words
+
+| English | Malayalam | Sanskrit |
+|---|---|---|
+| Yes | അതെ | आम् |
+| No | ഇല്ല | न |
+| OK | ശരി | अस्तु |
+| Are you sure? | ഉറപ്പാണോ? | निश्चयेन वा? |
+
+##### About screen (matches the `about_detail_<id>` strings in `guideline.md` §1.3)
+
+| English | Malayalam | Sanskrit |
+|---|---|---|
+| About | ആപ്പിനെക്കുറിച്ച് | विषयपरिचयः |
+| Version | പതിപ്പ് | संस्करणम् |
+| Build | നിർമ്മിതി | निर्मितिसङ्ख्या |
+| Author | രചയിതാവ് | लेखकः |
+| Email | ഇമെയിൽ | विद्युत्पत्रम् |
+| License | ലൈസൻസ് | अनुज्ञापत्रम् |
+| AI used | ഉപയോഗിച്ച AI | प्रयुक्ता कृत्रिमबुद्धिः |
+| IDE used | ഉപയോഗിച്ച IDE | प्रयुक्तं विकाससाधनम् |
+| Help | സഹായം | साहाय्यम् |
+| Feedback | പ്രതികരണം | प्रतिक्रिया |
+| Contact | ബന്ധപ്പെടുക | सम्पर्कः |
+| Terms | നിബന്ധനകൾ | नियमाः |
+| Privacy policy | സ്വകാര്യതാ നയം | गोपनीयतानीतिः |
+
+> About-screen row labels use the `about_detail_` prefix, which is exempt from the 8.6 budget, so a
+> long row label may wrap to two lines. Do not copy that liberty into a toolbar or a tab.
+
+### 8.6 Label Conciseness (Short UI Text vs. Descriptive Text)
+
+UI chrome MUST be short in **all three** languages. A long Malayalam or Sanskrit word wrapping onto
+two lines in a toolbar, tab, or bottom-navigation item is a layout bug, and Malayalam and Sanskrit
+compounds grow fast if written carelessly.
+
+**Budget for short text** — menu items, buttons, tabs, chips, navigation destinations, tooltips,
+app-bar titles, list-row labels, form-field labels, switch/checkbox labels, dialog action buttons:
+
+| Language | Target | Hard limit |
+|---|---|---|
+| English | 1–2 words | 20 characters |
+| Malayalam | 1–2 words | 22 characters |
+| Sanskrit | 1 word (nominal form preferred) | 22 characters |
+
+**How characters are counted.** A character is a visible character (a grapheme cluster), not a
+code point: a vowel sign or virama belongs to the letter before it. Count with ICU4J
+`BreakIterator.getCharacterInstance()` (test-only dependency), so the result is the same on every
+machine. ICU versions differ on whether a conjunct such as `ക്ക` is one character or two. The
+glossary in 8.5.4 was checked with the stricter count (every consonant counts), and every term fits.
+
+Rules:
+
+- Prefer a single word. Drop articles and filler: "Delete" not "Delete this item".
+- In Sanskrit follow the form conventions in 8.5.1: a nominal form for titles, tabs and labels
+  (`अन्वेषणम्`), a single-word polite imperative for buttons (`अन्विष्यताम्`). Never a multi-word
+  verb phrase.
+- In Malayalam prefer the common everyday word over a Sanskritized formal one, unless the app's
+  subject matter calls for the formal register.
+- Do not solve a long translation by shrinking the font, truncating, or adding an ellipsis —
+  choose a shorter word.
+- Sentence case in English (`Add note`), not Title Case, and never ALL CAPS in Malayalam or
+  Sanskrit.
+
+**Descriptive text is exempt** from the budget — and MUST still be complete, natural prose in all
+three languages: onboarding copy, empty-state explanations, help text, About `description`, error
+explanations, confirmation dialog bodies, notification bodies, tutorial content.
+
+**String name prefixes make the category checkable:**
+
+| Prefix | Category | Budget |
+|---|---|---|
+| `action_` | buttons, menu items, dialog actions | short |
+| `label_` | field labels, row labels, chips, switches | short |
+| `title_` | screen, app-bar and dialog titles | short |
+| `tab_`, `nav_` | tabs and navigation destinations | short |
+| `tooltip_` | tooltips on icon-only controls (7.7) | short |
+| `desc_`, `help_`, `empty_`, `error_`, `body_`, `notification_` | descriptive prose | exempt |
+| `about_detail_`, `about_made_with_love` | About rows and badge (`guideline.md` §1.3, §1.4) | exempt |
+| `language_name_` | endonyms in the picker (`translatable="false"`) | exempt |
+
+```kotlin
+// app/src/test/java/<package>/l10n/LabelLengthTest.kt
+import com.ibm.icu.text.BreakIterator
+
+class LabelLengthTest {
+    private val shortPrefixes = listOf("action_", "label_", "title_", "tab_", "nav_", "tooltip_")
+    private val limits = mapOf("values" to 20, "values-ml" to 22, "values-sa" to 22)
+
+    @Test
+    fun shortStringsFitTheBudget() {
+        val problems = mutableListOf<String>()
+        StringResources.resDirs().forEach { res ->
+            limits.forEach { (folder, limit) ->
+                StringResources.strings(File(res, folder))
+                    .filterKeys { name -> shortPrefixes.any { name.startsWith(it) } }
+                    .forEach { (name, value) ->
+                        val length = visibleLength(value)
+                        if (length > limit) problems += "$res/$folder $name: $length > $limit"
+                    }
+            }
+        }
+        assertTrue(problems.joinToString("\n"), problems.isEmpty())
+    }
+
+    private fun visibleLength(text: String): Int {
+        val iterator = BreakIterator.getCharacterInstance()
+        iterator.setText(text)
+        var count = 0
+        while (iterator.next() != BreakIterator.DONE) count++
+        return count
+    }
+}
+```
+
+### 8.7 Per-Feature Language Completeness
+
+A feature is **not done** until it works fully in English, Malayalam and Sanskrit.
+
+- No feature may ship with strings in `values/` only. Lint `MissingTranslation` (8.1) and the parity
+  test below fail the build.
+- No feature may show English under `ml` or `sa` — including snackbars, validation messages,
+  notifications, widgets, share text, exported files a user reads, and the About screen.
+- Content shipped as an asset (Markdown help pages, seed data a user reads) MUST exist in all three
+  languages as `assets/content/<name>_en.<ext>`, `<name>_ml.<ext>`, `<name>_sa.<ext>`, and the
+  screen MUST load the file for the current language.
+- Screen tests run in all three locales (18.7). Screenshots for a release are taken in all three
+  languages when the feature changes layout.
+
+**Accepted exceptions.** Some text is drawn by Android or Google, not by the app, and follows the
+system language: permission dialogs, the system share sheet, the notification shade's own labels,
+the launcher icon label, Play in-app review and in-app update dialogs, and Google sign-in screens.
+No app can change these. Everything the app itself draws is covered by this section.
+
+#### 8.7.1 No resolved strings in ViewModels or repositories
+
+A ViewModel outlives the language change, so a string it resolved earlier stays in the old
+language. ViewModels and repositories MUST return string ids, never resolved text:
+
+```kotlin
+// l10n/UiText.kt
+sealed interface UiText {
+    data class Res(@StringRes val id: Int, val args: List<Any> = emptyList()) : UiText
+    /** User-entered or stored data only — never UI chrome. */
+    data class Data(val value: String) : UiText
+}
+
+@Composable
+fun UiText.asString(): String = when (this) {
+    is UiText.Res -> stringResource(id, *args.toTypedArray())
+    is UiText.Data -> value
+}
+```
+
+#### 8.7.2 Notifications, workers, widgets
+
+- Code without an Activity builds its text from `context.localizedContext()` (8.4.2):
+
+  ```kotlin
+  val text = applicationContext.localizedContext()
+  NotificationCompat.Builder(text, NotificationChannels.REMINDERS)
+      .setContentTitle(text.getString(R.string.title_reminder))
+      .setContentText(text.getString(R.string.body_reminder_due))
+  ```
+
+- **Notification channel names** are shown in system settings and keep their old language until
+  the channel is registered again. Registering a channel with an existing id updates its name.
+  Register channels in `Application.onCreate`, in `Application.onConfigurationChanged` (Android
+  13+ language changes from system settings), and after every in-app change
+  (`LanguageRepository.set`, 8.4.1):
+
+  ```kotlin
+  object NotificationChannels {
+      const val REMINDERS = "reminders"
+
+      fun register(context: Context) {
+          if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+          val text = context.localizedContext()
+          context.getSystemService(NotificationManager::class.java).createNotificationChannel(
+              NotificationChannel(
+                  REMINDERS,
+                  text.getString(R.string.label_channel_reminders),
+                  NotificationManager.IMPORTANCE_DEFAULT,
+              ),
+          )
+      }
+  }
+
+  class MainApplication : Application() {
+      override fun onCreate() {
+          super.onCreate()
+          NotificationChannels.register(this)
+      }
+
+      override fun onConfigurationChanged(newConfig: Configuration) {
+          super.onConfigurationChanged(newConfig)
+          NotificationChannels.register(this)
+      }
+  }
+  ```
+
+- App widgets re-render their text when the language changes (update them from the same places).
+
+#### 8.7.3 Parity tests (required in every app)
+
+The tests read the source `res/` folders of every module directly, so they run as plain JVM unit
+tests. They need `systemProperty("projectRoot", rootDir.absolutePath)` on the test task and the
+`org.json` test dependency (build guide, "Languages").
+
+```kotlin
+// app/src/test/java/<package>/l10n/StringResources.kt
+object StringResources {
+    val projectRoot = File(
+        requireNotNull(System.getProperty("projectRoot")) {
+            "Set systemProperty(\"projectRoot\", rootDir.absolutePath) on the test task."
+        },
+    )
+
+    /** Every module's src/main/res folder, skipping build output. */
+    fun resDirs(): List<File> = projectRoot.walkTopDown()
+        .onEnter { it.name != "build" && !it.name.startsWith(".") }
+        .filter { it.isDirectory && it.name == "res" && it.parentFile?.name == "main" }
+        .toList()
+
+    /** name -> text of translatable <string> elements in one values folder. */
+    fun strings(valuesDir: File): Map<String, String> =
+        elements(valuesDir, "string").associate { it.getAttribute("name") to it.textContent.trim() }
+
+    /** Names of translatable <string>, <plurals> and <string-array> elements. */
+    fun names(valuesDir: File): Set<String> =
+        listOf("string", "plurals", "string-array").flatMap { tag ->
+            elements(valuesDir, tag).map { "$tag:${it.getAttribute("name")}" }
+        }.toSet()
+
+    private fun elements(valuesDir: File, tag: String): List<Element> =
+        valuesDir.listFiles { file -> file.extension == "xml" }.orEmpty().flatMap { file ->
+            val nodes = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+                .parse(file).getElementsByTagName(tag)
+            (0 until nodes.length).map { nodes.item(it) as Element }
+        }.filter { it.getAttribute("translatable") != "false" }
+}
+```
+
+```kotlin
+// app/src/test/java/<package>/l10n/TranslationParityTest.kt
+class TranslationParityTest {
+    private val translated = listOf("values-ml", "values-sa")
+
+    /** Strings allowed to equal English: brand names and symbols. Keep this list short. */
+    private val sameAsEnglishAllowed = setOf<String>()
+
+    @Test
+    fun everyModuleHasTheSameStringsInAllThreeLanguages() {
+        val problems = mutableListOf<String>()
+        StringResources.resDirs().forEach { res ->
+            val english = StringResources.names(File(res, "values"))
+            if (english.isEmpty()) return@forEach
+            translated.forEach { folder ->
+                val other = StringResources.names(File(res, folder))
+                (english - other).forEach { problems += "$res/$folder is missing $it" }
+                (other - english).forEach { problems += "$res/$folder has extra $it" }
+            }
+        }
+        assertTrue(problems.joinToString("\n"), problems.isEmpty())
+    }
+
+    @Test
+    fun noTranslationIsACopyOfEnglish() {
+        val problems = mutableListOf<String>()
+        StringResources.resDirs().forEach { res ->
+            val english = StringResources.strings(File(res, "values"))
+            translated.forEach { folder ->
+                StringResources.strings(File(res, folder)).forEach { (name, value) ->
+                    val placeholderOnly = value.replace(Regex("%\\d+\\$[sd]"), "").isBlank()
+                    if (value == english[name] && name !in sameAsEnglishAllowed && !placeholderOnly) {
+                        problems += "$res/$folder $name is still English"
+                    }
+                }
+            }
+        }
+        assertTrue(problems.joinToString("\n"), problems.isEmpty())
+    }
+
+    @Test
+    fun aboutBadgeKeepsTheHeartMarker() {
+        StringResources.resDirs().forEach { res ->
+            listOf("values", "values-ml", "values-sa").forEach { folder ->
+                val text = StringResources.strings(File(res, folder))["about_made_with_love"]
+                    ?: return@forEach
+                assertEquals("$res/$folder about_made_with_love", 1, Regex("%1\\$s").findAll(text).count())
+            }
+        }
+    }
+
+    @Test
+    fun aboutConfigHasAllThreeLanguages() {
+        val root = StringResources.projectRoot
+        val file = File(root, "app/src/main/assets/config/app_config.json")
+        if (!file.exists()) return // Pattern B app (guideline.md §1.2)
+        val json = JSONObject(file.readText())
+        val labels = StringResources.strings(File(root, "app/src/main/res/values")).keys
+        val problems = mutableListOf<String>()
+
+        fun checkLanguages(path: String, value: Any?) {
+            if (value !is JSONObject) return
+            listOf("en", "ml", "sa").forEach { lang ->
+                if (value.optString(lang).isBlank()) problems += "$path.$lang is missing"
+            }
+        }
+
+        checkLanguages("appName", json.opt("appName"))
+        checkLanguages("description", json.opt("description"))
+        val details = json.optJSONObject("details")
+        details?.keys()?.forEach { id ->
+            checkLanguages("details.$id", details.opt(id))
+            val label = "about_detail_" + id.replace(Regex("[A-Z]")) { "_" + it.value.lowercase() }
+            if (label !in labels) problems += "details.$id has no $label string"
+        }
+        assertTrue(problems.joinToString("\n"), problems.isEmpty())
+    }
+
+    @Test
+    fun contentAssetsExistInAllThreeLanguages() {
+        val content = File(StringResources.projectRoot, "app/src/main/assets/content")
+        val problems = mutableListOf<String>()
+        content.listFiles { file -> file.nameWithoutExtension.endsWith("_en") }.orEmpty().forEach { en ->
+            listOf("ml", "sa").forEach { lang ->
+                val twin = File(en.parentFile, en.name.replace("_en.", "_$lang."))
+                if (!twin.exists()) problems += "${twin.name} is missing"
+            }
+        }
+        assertTrue(problems.joinToString("\n"), problems.isEmpty())
+    }
+}
+```
+
+### 8.8 RTL Layout Support
 
 - Never use `left` and `right` for padding, alignment, or positioning of UI elements. Use `start`
   and `end` equivalents in Compose layouts.
-- Test RTL by switching the device locale to Arabic or Hebrew.
+- None of our three languages is right-to-left, so this rule keeps the app ready rather than
+  supporting a current language. Test RTL with the developer option "Force RTL layout direction" —
+  do **not** add Arabic or Hebrew strings or locales, because the language set is fixed at `en`,
+  `ml`, `sa` (8.3).
 
-### 8.4 Locale-Sensitive Formatting
+### 8.9 Locale-Sensitive Formatting
 
-Use `java.text.DateFormat`, `java.time.format.DateTimeFormatter`, or
+Use `java.time.format.DateTimeFormatter`, `java.text.DateFormat`, `java.text.NumberFormat` or
 `android.text.format.DateUtils` for all locale-sensitive formatting. Never use `toString()` on
-dates, numbers, or currencies in user-visible strings.
+dates, numbers, or currencies in user-visible strings. Always pass `formattingLocale(...)` from
+8.3.1, so Sanskrit uses English formatting data with Western digits instead of broken output.
+
+```kotlin
+val locale = formattingLocale(LocalConfiguration.current.locales[0])
+
+DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale).format(date)
+NumberFormat.getNumberInstance(locale).format(value)
+
+// Sort user-visible text with a collator, not plain string comparison.
+val collator = Collator.getInstance(locale)
+val sorted = items.sortedWith(compareBy(collator) { it.title })
+```
+
+`java.time` needs API 26. With the baseline `minSdk 24`, enable core library desugaring or use
+`java.text` / `DateUtils` instead.
 
 ---
 
@@ -1168,6 +2244,9 @@ illustrations:
 - For downloadable fonts (Google Fonts via the Android framework), verify the font download
   behavior for offline apps — downloadable fonts require network access.
 - For offline apps, bundle font files in `res/font/` and reference them in XML or Compose.
+- Malayalam and Devanagari fonts bundled for the three app languages (8.3.4) — for example
+  Noto Sans Malayalam and Noto Sans Devanagari — are OFL-licensed. Record them and their licence
+  in the app's licence notices, and bundle only the weights the app uses.
 
 ---
 
@@ -1277,6 +2356,44 @@ Commands:
 ./gradlew verifyRoborazziDebug     # Fail if differences found
 ```
 
+### 18.7 Localization Tests (Core Baseline)
+
+Every app ships English, Malayalam and Sanskrit (section 8), so these tests are required:
+
+| Test | What it checks | Section |
+|---|---|---|
+| `TranslationParityTest` (JVM) | Same `<string>`, `<plurals>`, `<string-array>` names in `values`, `values-ml`, `values-sa` of every module; no `ml`/`sa` value copied from English; `app_config.json` language maps complete; every About `details` id has a label string; help assets have `ml`/`sa` twins | 8.7 |
+| `LabelLengthTest` (JVM) | Short-prefixed strings within the 8.6 budget | 8.6 |
+| Badge format test (JVM) | `about_made_with_love` has `%1$s` exactly once in all three files | `guideline.md` §1.4 |
+| Screen tests in three locales (Robolectric) | Each screen test runs under `en`, `ml`, `sa`; no crash, no clipped text, `assertIconOnlyControlsHaveLabels()` passes | 7.7, 8.3 |
+| Picker test under `sa` | Date/time pickers render readable months and Western digits | 8.3.2 |
+
+Run a screen test in each language with Robolectric qualifiers:
+
+```kotlin
+@RunWith(RobolectricTestRunner::class)
+class SettingsScreenLocaleTest {
+    @get:Rule
+    val composeTestRule = createComposeRule()
+
+    @Test @Config(qualifiers = "en")
+    fun settings_english() = checkSettings()
+
+    @Test @Config(qualifiers = "ml")
+    fun settings_malayalam() = checkSettings()
+
+    @Test @Config(qualifiers = "sa")
+    fun settings_sanskrit() = checkSettings()
+
+    private fun checkSettings() {
+        composeTestRule.setContent { AppTheme { SettingsScreenContent(state = previewState) } }
+        composeTestRule.assertIconOnlyControlsHaveLabels()
+    }
+}
+```
+
+When the project uses Roborazzi, record screenshots of changed screens in all three qualifiers.
+
 ---
 
 ## 19. CI Standard
@@ -1315,6 +2432,58 @@ Additional recommended steps:
 ### 19.3 Pre-Commit
 
 A pre-commit hook MAY run formatting and analysis locally, but CI remains the source of truth.
+
+### 19.4 Language, Tooltip, And Lint Gates (All Apps)
+
+These gates enforce rules that review alone misses. When the repository has CI, these steps MUST
+be in it. Without CI, run them before every release (`release_process.md` §8).
+
+```yaml
+steps:
+  - run: bash scripts/check_sanskrit.sh           # 8.5 — no Hindi markers in Sanskrit text
+  - run: bash scripts/check_icon_buttons.sh       # 7.7 — icon buttons only via the wrappers
+  - run: bash scripts/check_lint_suppressions.sh  # 8.1 — translation lint never silenced
+  - run: ./gradlew lint testDebugUnitTest         # lint errors + parity and label-length tests
+```
+
+`scripts/check_sanskrit.sh` is given in 8.5.1.
+
+`scripts/check_icon_buttons.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Fail when an icon-only button is drawn without the tooltip wrappers (standard 7.7).
+set -u
+if grep -rnE --include='*.kt' --exclude-dir=build \
+     --exclude='TooltipIconButton.kt' --exclude='TooltipFab.kt' \
+     '\b(IconButton|FilledIconButton|FilledTonalIconButton|OutlinedIconButton|IconToggleButton|FloatingActionButton|SmallFloatingActionButton|LargeFloatingActionButton)\(' .; then
+  echo 'Use TooltipIconButton / TooltipFab for icon-only controls (standard 7.7).'
+  exit 1
+fi
+exit 0
+```
+
+`scripts/check_lint_suppressions.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Fail when translation or string-format lint checks are suppressed or baselined (standard 8.1).
+set -u
+IDS='MissingTranslation|ExtraTranslation|StringFormatMatches|StringFormatCount'
+if grep -rnE --exclude-dir=build --include='*.xml' --include='*.kt' --include='*.kts' \
+     "(ignore=\"[^\"]*($IDS)|SuppressLint\([^)]*($IDS)|disable \+?=.*($IDS))" .; then
+  echo 'Translation lint checks must not be suppressed.'
+  exit 1
+fi
+if find . -path '*/build' -prune -o -name 'lint-baseline*.xml' -print | xargs -r grep -nE "id=\"($IDS)\""; then
+  echo 'Translation lint issues must not be in a lint baseline.'
+  exit 1
+fi
+exit 0
+```
+
+The gates use GNU `grep` (`-P` for the Sanskrit gate). Run them on a Linux CI runner, or locally
+in Git Bash / WSL.
 
 ---
 
@@ -1455,14 +2624,25 @@ When this standard is supplied to an AI coding assistant, the assistant MUST:
 - Apply the security profile in force; never log secrets or weaken cryptographic behavior.
 - Ensure all `plans/` and `change_log/` entries follow the privacy rule in 21.1.1: **relative
   repository paths only**, **no local system details**, and **no secrets**.
-- Put all user-visible strings in `res/values/strings.xml` and read them through
-  `stringResource()` or `context.getString()` — never a raw string literal in a Composable, even
-  in a single-language app.
+- Put all user-visible strings in `strings.xml` and read them through `stringResource()` or
+  `context.getString()` — never a raw string literal in a Composable. Every app ships English,
+  Malayalam and Sanskrit: add each new string to `values/`, `values-ml/` and `values-sa/` in the
+  same change, with a real translation (section 8).
+- Write Sanskrit strings under the 8.5 rules and glossary — never Hindi. Mark every Malayalam or
+  Sanskrit string you write as needing native-reader review in the change log.
+- Keep menu, button, label, tab and tooltip text within the 8.6 budget in all three languages.
+- Return `@StringRes` ids or `UiText` from ViewModels and repositories — never resolved strings
+  (8.7).
+- Never remove the language build settings (locale filter, `generateLocaleConfig`,
+  `bundle.language.enableSplit = false`) or the `AppCompatActivity` base class (8.1).
 - Always use `val` over `var` where possible.
 - Never use `LazyColumn` without a `key` parameter.
 - Never call heavy synchronous work on the main thread; use `withContext(Dispatchers.IO)`.
 - Always use `Log.d`/`Log.e` with a consistent `TAG`, never `println()`.
-- Always add a `contentDescription` to interactive icons and images.
+- Always add a `contentDescription` to interactive icons and images, and draw icon-only buttons
+  with `TooltipIconButton` / `TooltipFab` so they have a localized tooltip (7.7).
+- Never remove or reword the "Made with ❤️ from India" badge on the About screen
+  (`guideline.md` §1.4).
 
 ### 22.3 After Writing Code
 
@@ -1492,8 +2672,14 @@ A task is complete only when all applicable items are true.
 - No secrets, build output, or local machine files were added to git.
 - All `plans/` and `change_log/` files use relative repository paths only and contain zero local
   system details and zero sensitive data — safe to publish on the internet (section 21.1.1).
-- `res/values/strings.xml` exists, and every user-visible string added or changed by this task
-  comes from string resources (section 8.2).
+- Every user-visible string added or changed by this task comes from string resources and
+  exists, translated, in `values/`, `values-ml/` and `values-sa/` (sections 8.2, 8.7).
+- The feature works fully in English, Malayalam and Sanskrit, including notifications and
+  background text (section 8.7).
+- Sanskrit text passes `scripts/check_sanskrit.sh`; short labels are within budget (8.5, 8.6).
+- Every icon-only control added by this task has a localized tooltip (section 7.7).
+- The About screen still ends with the "Made with ❤️ from India" badge (`guideline.md` §1.4).
+- Google Play build-time items (`release_process.md` §9A.1–§9A.4) still hold.
 - KSP-generated files were not manually edited.
 
 ### 23.2 Production App Extension

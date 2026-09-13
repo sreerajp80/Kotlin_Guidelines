@@ -271,6 +271,25 @@ Migration history:
   - Color contrast: WCAG AA minimum (4.5:1 normal text, 3:1 large text)
   - Screen reader: TalkBack tested before each release
   - Text scale: layouts verified at 1.0×, 1.5×, 2.0× text scale
+  - Tooltips: every icon-only control uses `TooltipIconButton` / `TooltipFab` (engineering standard §7.7)
+
+### Localization
+
+Every app ships English, Malayalam and Sanskrit (engineering standard section 8). Record this
+app's choices:
+
+| Item | This app |
+|---|---|
+| Languages | `en` (default `values/`), `ml` (`values-ml/`), `sa` (`values-sa/`) — fixed |
+| Modules with UI strings | `<app, feature modules…>` |
+| Locale filter | `<resourceConfigurations / androidResources.localeFilters>` = `en`, `ml`, `sa` |
+| Locale config | `<generated (verified on <date>) / hand-written res/xml/locales_config.xml>` |
+| Language picker location | `<Settings screen route>` |
+| `app_name` | `<translated in all three / translatable="false" brand name>` |
+| Formatting locales | `en` → English, `ml` → `ml-IN`, `sa` → English; Western digits `<or recorded exception>` |
+| Fonts for Malayalam / Devanagari | `<system fonts verified on <device list> / bundled Noto fonts in res/font/>` |
+| Translated asset content | `<none / assets/content/help_<lang>.md …>` |
+| Native-reader reviewer | `<role, not a personal name or email>` |
 
 ---
 
@@ -323,7 +342,9 @@ Document constraints that shape implementation choices.
 - Performance constraints:
   - Cold startup target: under 2 seconds to first meaningful frame (release build)
   - APK size budget: `<see engineering standard section 10.7>`
-- Regulatory or store constraints: `<if any>`
+- Store constraints: Google Play readiness gate (`release_process.md` §9A); `targetSdk` re-checked
+  against Play's current target API level policy before every release
+- Regulatory constraints: `<if any>`
 - Team constraints: `<single developer / multi-developer / release cadence>`
 - Offline constraints: `<no INTERNET permission / no network dependencies>`
 

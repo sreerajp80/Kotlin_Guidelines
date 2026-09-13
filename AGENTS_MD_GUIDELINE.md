@@ -48,7 +48,7 @@ Write sections in this order. Skip the ones that do not apply (see the checklist
 8. Build types / product flavors
 9. Signing / keystore
 10. Security rules
-11. String resources (mandatory for all apps)
+11. Localization rules — English, Malayalam, Sanskrit (mandatory for all apps)
 12. Code style / naming conventions
 13. Testing rules
 14. Dependency constraints
@@ -73,7 +73,7 @@ Write sections in this order. Skip the ones that do not apply (see the checklist
 | 8 | Build types / flavors | If flavors used | inline or link | inline |
 | 9 | Signing / keystore | If it ships releases | link | inline |
 | 10 | Security rules | **Always** | summarize + link | inline |
-| 11 | String resources | **Always** | inline | inline |
+| 11 | Localization rules | **Always** | inline | inline |
 | 12 | Code style / naming | **Always** | short | full table |
 | 13 | Testing rules | **Always** | short + link | full |
 | 14 | Dependency constraints | If constrained | link | inline allow/block lists |
@@ -212,11 +212,26 @@ import `in`.sreerajp.app_name.data.repository.AppRepository
 
 ---
 
-## String resources   <!-- mandatory for every app, even single-language -->
+## Localization rules   <!-- mandatory for every app: English, Malayalam, Sanskrit -->
 
-- All user-visible text comes from `res/values/strings.xml` via `stringResource()` or
-  `context.getString()` — never a raw string literal in a Composable.
-- This applies even though the app ships only <en>.
+- This app ships three languages: **English (`values/`), Malayalam (`values-ml/`), Sanskrit
+  (`values-sa/`)**. Every feature and every screen works in all three.
+- All user-visible text comes from `strings.xml` via `stringResource()` or `context.getString()` —
+  never a raw string literal in a Composable. ViewModels return `@StringRes` / `UiText`, not
+  resolved strings.
+- Every new string goes into **all three** files with a real translation. Lint
+  `MissingTranslation` is an error and is never suppressed or baselined.
+- **Sanskrit means Sanskrit, not Hindi in Devanagari.** Follow the engineering standard §8.5 rules
+  and glossary; `scripts/check_sanskrit.sh` must pass.
+- The language defaults to the system language (English when it is none of the three). The
+  Settings language picker (System default / English / മലയാളം / संस्कृतम्) uses
+  `AppCompatDelegate.setApplicationLocales` (§8.4). Never remove the locale filter,
+  `generateLocaleConfig`, `bundle.language.enableSplit = false`, or the `AppCompatActivity` base.
+- Menu, button, label, tab and tooltip strings stay short in all three languages (§8.6); only
+  descriptive text may be long.
+- Every icon-only control uses `TooltipIconButton` / `TooltipFab` with a localized tooltip (§7.7).
+- The About screen is data-driven, localized, and ends with the "Made with ❤️ from India" badge
+  (`guideline.md` §1.4).
 - Literals are allowed only for logs, non-UI exception messages, asset paths, route names, and
   map/JSON keys.
 
@@ -356,6 +371,9 @@ Do not shorten these into a single link. Keep the short inline version shown in 
 - [ ] Build commands are copy-paste ready and use `./gradlew` tasks.
 - [ ] Workflow rules (plan/approve/log) and simple-English rule are present, inline.
 - [ ] `plans/` and `change_log/` entries use relative paths only and contain zero local system details and zero sensitive data — safe to publish on the internet.
-- [ ] A string resources rule is present: all user-visible text comes from `res/values/strings.xml` via `stringResource()`, even if the app ships one language.
+- [ ] The three mandatory languages are named: English, Malayalam, Sanskrit — with string parity across `values/`, `values-ml/`, `values-sa/`.
+- [ ] The Sanskrit-not-Hindi rule and the in-app language picker rule are present.
+- [ ] The tooltip rule (every icon-only control) and the short-label rule are present.
+- [ ] The About-screen rule is present, including the "Made with ❤️ from India" badge.
 - [ ] Every `<...>` placeholder from the template is replaced or its section deleted.
 - [ ] Rules in `AGENTS.md` match `CLAUDE.md` exactly.

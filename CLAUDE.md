@@ -22,7 +22,7 @@ Read it before making any changes to the guidelines, standards, or blueprint tem
 |----------|---------|
 | `README.md` | Overview of the guidelines set, template explanation, and applicability profiles |
 | `GUIDELINES_MANIFEST.md` | Portable pointer manifest copied into an app's `docs/` folder |
-| `guideline.md` | Cross-app conventions (About-screen config, release keystore rules, source package layout) |
+| `guideline.md` | Cross-app conventions (About-screen config and "Made with ❤️ from India" badge, English/Malayalam/Sanskrit languages, release keystore rules, source package layout) |
 | `kotlin_project_engineering_standard.md` | Master 24-section project-agnostic engineering rulebook |
 | `architecture.md` | Per-project architecture blueprint template |
 | `kotlin_build_configuration_guide.md` | Gradle Kotlin DSL, signing, version catalogs, R8/ProGuard, and flavors reference |

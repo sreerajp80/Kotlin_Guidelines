@@ -109,7 +109,7 @@ Say:
 
 | Document | Answers |
 |----------|---------|
-| `guideline.md` | *What* common conventions (About config, release keystore, baseline layout) apply across all apps? |
+| `guideline.md` | *What* common conventions (About config and badge, the three app languages, release keystore, baseline layout) apply across all apps? |
 | `kotlin_project_engineering_standard.md` | *How* should all Kotlin Android code be written? Universal rules for every project. |
 | `kotlin_build_configuration_guide.md` | *How* exactly do build types, flavors, R8, and signing wire into Gradle? |
 | `architecture.md` | *What* did this specific project decide? Tier, packages, Room schema, routes, signing strategy. |

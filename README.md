@@ -18,7 +18,7 @@ That is why cross-references inside the documents use a `docs/` prefix — for e
 
 | Document | What it is |
 |---|---|
-| [guideline.md](guideline.md) | My personal cross-app conventions: About-screen config, the release keystore rules, and the baseline source package layout. **This is the source of truth for keystore rules.** |
+| [guideline.md](guideline.md) | My personal cross-app conventions: About-screen config and its fixed "Made with ❤️ from India" badge, the three mandatory app languages (English / Malayalam / Sanskrit), the release keystore rules, and the baseline source package layout. **This is the source of truth for keystore rules.** |
 | [kotlin_project_engineering_standard.md](kotlin_project_engineering_standard.md) | The master, project-agnostic rulebook — rules that apply to *every* app (structure, UI, accessibility, performance, database, logging, security, CI, git, Definition of Done). |
 | [architecture.md](architecture.md) | A per-project architecture blueprint template. You fill it in with one app's actual decisions. |
 | [kotlin_build_configuration_guide.md](kotlin_build_configuration_guide.md) | A technical reference for Gradle Kotlin DSL, product flavors, build types, signing, R8/ProGuard, and version catalogs. |
