@@ -46,43 +46,56 @@ Every app using Pattern A MUST use exactly these paths and these class names (`A
 ```json
 {
   "appName": {
-    "en": "<App name in English>",
-    "ml": "<App name in Malayalam>",
-    "sa": "<App name in Sanskrit>"
+    "en": "SreerajP PDF App",
+    "ml": "ശ്രീരാജ് പി പിഡിഎഫ് ആപ്പ്",
+    "sa": "श्रीराजः पी पीडीएफ् अनुप्रयोगः"
   },
   "description": {
     "en": "One-line description of what the app does.",
-    "ml": "<Malayalam translation>",
-    "sa": "<Sanskrit translation>"
+    "ml": "ആപ്പ് എന്തു ചെയ്യുന്നു എന്നതിന്റെ ഒറ്റവരി വിവരണം.",
+    "sa": "एतत् अनुप्रयोगः किं करोति इति एकपङ्क्तिवर्णनम्।"
   },
   "version": "1.0.0",
   "build": "1",
   "details": {
-    "author": "Your Name",
-    "email": "<Email>",
+    "author": {
+      "en": "Sreeraj P",
+      "ml": "ശ്രീരാജ് പി",
+      "sa": "श्रीराजः पी"
+    },
+    "email": "sreerajp@zohomail.in",
     "license": {
       "en": "All libraries used are open source.",
-      "ml": "<Malayalam translation>",
-      "sa": "<Sanskrit translation>"
+      "ml": "ഉപയോഗിച്ച എല്ലാ ലൈബ്രറികളും ഓപ്പൺ സോഴ്സ് ആണ്.",
+      "sa": "सर्वाणि प्रयुक्तानि पुस्तकालयानि मुक्तस्रोतानि सन्ति।"
     },
-    "aiUsed": "<AI Name>",
-    "ideUsed": "<IDE Name>"
+    "aiUsed": {
+      "en": "Anthropic Claude / Google Gemini",
+      "ml": "ആന്ത്രോപിക് ക്ലോഡ് / ഗൂഗിൾ ജെമിനി",
+      "sa": "आन्त्रोपिक् क्लोड् / गूगल् जेमिनि"
+    },
+    "ideUsed": {
+      "en": "Visual Studio Code / Antigravity",
+      "ml": "വിഷ്വൽ സ്റ്റുഡിയോ കോഡ് / ആന്റിഗ്രാവിറ്റി",
+      "sa": "विश्वल् स्टुडियो कोड् / आन्टिग्राविटि"
+    }
   }
 }
 ```
 
 - `appName`, `description`, `version`, `build` are required top-level fields.
-- **Localized values.** `appName`, `description` and every `details` value is either:
-  - a **plain string** — the same text in every language. Use it only for values that do not
-    change with language (a person's name, an email, a version, a tool name); or
-  - a **language map** `{"en": …, "ml": …, "sa": …}` — MUST be used for any prose a user reads
-    (description, licence text). All three keys MUST be present and non-empty; the parity test
-    in [engineering standard §8.7](kotlin_project_engineering_standard.md) checks this.
-- If the app name is a brand that stays the same in every language, `appName` MAY be a plain
-  string. Record that choice in `docs/architecture.md` §16.
-- `details` is a free map of **stable ids** → value. Ids are `camelCase` (`author`, `email`,
-  `license`, `aiUsed`, `ideUsed`). The row label shown to the user is **not** the id — it comes
-  from `strings.xml` (see §1.3). Add or remove rows as needed.
+- `details` is a free map. Add or remove rows as needed; the About screen renders each
+  entry as a labelled row.
+- **Only technical, non-display values** that are never shown as user-facing text — such as
+  email addresses, URLs, version strings, and build numbers — MAY be plain strings.
+- **`appName`, `author`, `aiUsed`, and `ideUsed` MUST use the full locale map**
+  `{"en": …, "ml": …, "sa": …}` with transliterations in Malayalam and Sanskrit. These are
+  display values that appear on screen and must be readable in each script.
+- Sentences, prose, and anything a user reads as descriptive text MUST use the locale map
+  with all three languages filled in (§3, engineering standard §8).
+- **Detail keys are identifiers, not labels.** Use `lowerCamelCase` keys (`author`,
+  `aiUsed`); the visible label comes from `about_detail_<id in snake_case>` in `strings.xml`
+  (`about_detail_author`, `about_detail_ai_used`) so the label itself is translated. See §1.3.
 - Keep `version` and `build` in sync with `versionName` / `versionCode` in
   `build.gradle.kts`. `ConfigService.loadAndVerify` logs a non-fatal debug note if they drift
   (see the `ConfigService` rules below).
